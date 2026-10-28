@@ -1,0 +1,15 @@
+# agentic-forms
+
+Build forms and collect answers into tables.
+
+Keywords: forms,surveys,responses,agents,mcp,cli,tables,collaboration.
+
+- SDK: import { summarizeText, dispatchText } from "agentic-forms".
+- CLI: agentic-forms summary --text "...".
+- MCP: run agentic-forms mcp, then call summarize_text.
+
+## Docs
+
+- README: https://github.com/pooriaarab/agentic-forms
+- Core contract: https://github.com/pooriaarab/agentic-forms/blob/main/docs/agentic-core.md
+- License: MIT

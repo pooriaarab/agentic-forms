@@ -52,6 +52,10 @@ export type Form = {
   title: string;
   version: number;
   status: "draft" | "published";
+  /** Privacy notice. When set, a respondent must consent before an answer is stored. */
+  notice?: string;
+  /** Days to keep each response. Unset keeps responses until you delete them. */
+  retentionDays?: number;
   sections: Section[];
 };
 
@@ -123,6 +127,13 @@ export function validateForm(form: Form): Issue[] {
   const add = (code: string, message: string, question?: string) =>
     issues.push({ code, message, ...(question ? { question } : {}) });
 
+  if (form.retentionDays !== undefined && !(Number.isInteger(form.retentionDays) && form.retentionDays >= 1 && form.retentionDays <= 3650)) {
+    add("bad_setting", "retention must be a whole number of days from 1 to 3650");
+  }
+  if (form.notice !== undefined && (form.notice.trim() === "" || form.notice.length > 5000)) {
+    add("bad_setting", "the notice must hold 1 to 5000 characters");
+  }
+
   const index = new Map<string, number>();
   const sectionIds = new Set<string>();
   let count = 0;
@@ -192,6 +203,19 @@ export function validateForm(form: Form): Issue[] {
   return issues;
 }
 
+/** Faults that block publishing but not saving a draft. A required file question has no upload on the fill page. */
+export function validateForPublish(form: Form): Issue[] {
+  const issues = validateForm(form);
+  for (const section of form.sections) {
+    for (const q of section.questions) {
+      if (q.type === "file" && q.required) {
+        issues.push({ code: "file_not_supported", question: q.id, message: "a required file question cannot be filled on the public page yet" });
+      }
+    }
+  }
+  return issues;
+}
+
 function checkQuestion(q: Question, add: (code: string, message: string, question?: string) => void): void {
   if (CHOICE_TYPES.includes(q.type)) {
     const choices = q.choices ?? [];
@@ -229,14 +253,16 @@ function checkQuestion(q: Question, add: (code: string, message: string, questio
 export type AnswerResult = { ok: boolean; issues: Issue[]; answers: Answers };
 
 /** Validates answers against a form. The result keeps only answers to visible questions. */
-export function validateAnswers(form: Form, answers: Answers): AnswerResult {
+export function validateAnswers(form: Form, input: Answers): AnswerResult {
+  // No prototype, so a question id like "constructor" reads as unanswered.
+  const answers: Answers = Object.assign(Object.create(null), input);
   const issues: Issue[] = [];
   const add = (code: string, question: string, message: string) => issues.push({ code, question, message });
   const known = new Set(form.sections.flatMap((s) => s.questions.map((q) => q.id)));
   for (const id of Object.keys(answers)) {
     if (!known.has(id)) issues.push({ code: "unknown_question", question: id, message: `no question "${id}"` });
   }
-  const cleaned: Answers = {};
+  const cleaned: Answers = Object.create(null);
   for (const q of visibleQuestions(form, answers)) {
     const value = own(answers, q.id);
     if (isEmpty(value)) {

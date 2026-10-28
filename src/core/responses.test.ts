@@ -4,6 +4,7 @@ import type { Form, Question } from "./form.js";
 import { createFormRepo } from "./repo.js";
 import { SubmitError, createResponses, toCsv } from "./responses.js";
 import { createMemoryStore } from "./store.js";
+import { validateForm } from "./form.js";
 
 const q = (id: string, extra: Partial<Question> = {}): Question => ({ id, type: "short_text", label: id, required: false, ...extra });
 const form = (questions: Question[]): Form => ({
@@ -123,5 +124,24 @@ describe("csv safety", () => {
 
   test("a negative number stays a number", () => {
     expect(toCsv([[-5, 3, true]])).toBe("-5,3,true\n");
+  });
+});
+
+describe("export failures", () => {
+  test("a missing snapshot is a named error, not a TypeError", async () => {
+    const store = createMemoryStore();
+    const repo = createFormRepo(store);
+    const responses = createResponses(store, repo);
+    await repo.save(form([q("a")]));
+    await repo.publish("f");
+    await responses.submit("f", { a: "x" });
+    await store.delete("form_versions", "f@1");
+    await expect(responses.exportCsv("f")).rejects.toThrow('snapshot "f@1" is missing');
+  });
+
+  test("a question id that would repeat a fixed column is refused", () => {
+    for (const id of ["response_id", "submitted_at", "form_version"]) {
+      expect(validateForm(form([q(id)])).map((i) => i.code)).toEqual(["reserved_id"]);
+    }
   });
 });

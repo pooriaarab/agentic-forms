@@ -103,7 +103,8 @@ export function createResponses(store: Store, repo: FormRepo) {
       const versions = [...new Set(rows.map((r) => r.formVersion))].sort((a, b) => b - a);
       const columns: string[] = [];
       for (const version of versions) {
-        const form = (await repo.getVersion(formId, version)) as Form;
+        const form = await repo.getVersion(formId, version);
+        if (!form) throw new Error(`snapshot "${formId}@${version}" is missing`);
         for (const section of form.sections) {
           for (const question of section.questions) if (!columns.includes(question.id)) columns.push(question.id);
         }

@@ -11,6 +11,22 @@ export class FormError extends Error {
   }
 }
 
+/** The head moved since the caller read it. Read again and retry. */
+export class VersionConflictError extends Error {
+  constructor(readonly formId: string, readonly expected: number, readonly actual: number | null) {
+    super(`form "${formId}" is at version ${actual ?? "none"}, not ${expected}`);
+    this.name = "VersionConflictError";
+  }
+}
+
+/** A published version is frozen. It is never written twice. */
+export class SnapshotExistsError extends Error {
+  constructor(readonly formId: string, readonly version: number) {
+    super(`version ${version} of form "${formId}" is already published and cannot change`);
+    this.name = "SnapshotExistsError";
+  }
+}
+
 const asDoc = (form: Form) => form as unknown as Doc;
 
 /**
@@ -26,17 +42,28 @@ export function createFormRepo(store: Store) {
   return {
     get,
     getVersion,
-    /** Stores a draft. Editing a published form starts the next version. Throws FormError on unsound logic. */
-    async save(form: Form): Promise<Form> {
+    /**
+     * Stores a draft. Editing a published form starts the next version. Throws
+     * FormError on unsound logic. With `expectedVersion`, the save is a
+     * compare-and-set: it throws VersionConflictError unless the head is still
+     * at that version.
+     */
+    async save(form: Form, options: { expectedVersion?: number } = {}): Promise<Form> {
       const issues = validateForm(form);
       if (issues.length > 0) throw new FormError(issues);
-      const head = await get(form.id);
-      const version = head ? (head.status === "published" ? head.version + 1 : head.version) : 1;
-      const draft: Form = { ...form, version, status: "draft" };
-      await store.put(HEADS, form.id, asDoc(draft));
-      return draft;
+      return store.transaction(async (tx) => {
+        const head = (await tx.get(HEADS, form.id)) as unknown as Form | null;
+        const { expectedVersion } = options;
+        if (expectedVersion !== undefined && head?.version !== expectedVersion) {
+          throw new VersionConflictError(form.id, expectedVersion, head?.version ?? null);
+        }
+        const version = head ? (head.status === "published" ? head.version + 1 : head.version) : 1;
+        const draft: Form = { ...form, version, status: "draft" };
+        await tx.put(HEADS, form.id, asDoc(draft));
+        return draft;
+      });
     },
-    /** Freezes the head as a published version. */
+    /** Freezes the head as a new published version. Throws SnapshotExistsError rather than replace one. */
     async publish(id: string): Promise<Form> {
       return store.transaction(async (tx) => {
         const head = (await tx.get(HEADS, id)) as unknown as Form | null;
@@ -44,6 +71,7 @@ export function createFormRepo(store: Store) {
         if (head.status === "published") throw new Error(`form "${id}" is already published`);
         const issues = validateForm(head);
         if (issues.length > 0) throw new FormError(issues);
+        if ((await tx.get(VERSIONS, `${id}@${head.version}`)) !== null) throw new SnapshotExistsError(id, head.version);
         const published: Form = { ...head, status: "published" };
         await tx.put(HEADS, id, asDoc(published));
         await tx.put(VERSIONS, `${id}@${head.version}`, asDoc(published));

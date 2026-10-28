@@ -4,28 +4,36 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { JSDOM } from "jsdom";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
+const TOKEN = "e2e-token-0123456789-0123456789-abcdef"; // 40 bytes
 const PORT = 8799;
 const base = `http://127.0.0.1:${PORT}`;
-const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
-let dev: ChildProcess;
+const auth = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
+const running: ChildProcess[] = [];
 
-beforeAll(async () => {
-  dev = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(PORT), "--var", "FORMS_API_TOKEN:e2e-token"], {
+// Starts `wrangler dev` and waits until it answers any request. A Worker that
+// refuses to start answers 500, so readiness is "any HTTP status".
+async function start(port: number, token?: string): Promise<void> {
+  const vars = token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`];
+  const proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(port), ...vars], {
     env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
   });
+  running.push(proc);
   let log = "";
-  dev.stdout?.on("data", (d) => (log += d));
-  dev.stderr?.on("data", (d) => (log += d));
+  proc.stdout?.on("data", (d) => (log += d));
+  proc.stderr?.on("data", (d) => (log += d));
   const deadline = Date.now() + 45_000;
   for (;;) {
     try {
-      if ((await fetch(`${base}/health`)).ok) return;
+      await fetch(`http://127.0.0.1:${port}/health`);
+      return;
     } catch {}
     if (Date.now() > deadline) throw new Error(`wrangler dev did not start:\n${log.slice(-1500)}`);
     await new Promise((r) => setTimeout(r, 500));
   }
-});
-afterAll(() => dev?.kill());
+}
+
+beforeAll(() => start(PORT, TOKEN));
+afterAll(() => running.forEach((proc) => proc.kill()));
 
 const api = (path: string, body?: unknown, headers: Record<string, string> = auth) =>
   fetch(`${base}/api/v1/forms${path}`, { method: body === undefined ? "GET" : "POST", headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -42,6 +50,41 @@ const spec = {
     { id: "why", type: "long_text", label: "Why red", required: true, showIf: { question: "color", op: "equals", value: "red" } },
   ] }],
 };
+
+describe("secret failures", () => {
+  const routes: [string, string][] = [
+    ["GET", "/api/v1/forms"],
+    ["POST", "/api/v1/forms"],
+    ["GET", "/api/v1/forms/x"],
+    ["GET", "/api/v1/forms/x/responses"],
+    ["GET", "/api/v1/forms/x/export"],
+  ];
+
+  test("a Worker with no token answers 503 on every /api/v1 route", async () => {
+    await start(8800);
+    for (const [method, path] of routes) {
+      for (const headers of [{}, { authorization: "Bearer anything" }, { authorization: "Bearer " }] as Record<string, string>[]) {
+        const res = await fetch(`http://127.0.0.1:8800${path}`, { method, headers, body: method === "POST" ? "{}" : undefined });
+        expect(res.status, `${method} ${path}`).toBe(503);
+      }
+    }
+    expect((await fetch("http://127.0.0.1:8800/health")).status).toBe(200);
+  });
+
+  test("a token under 32 bytes makes the Worker refuse to serve", async () => {
+    await start(8801, "a".repeat(31));
+    for (const path of ["/health", "/api/v1/forms", "/f/x"]) {
+      const res = await fetch(`http://127.0.0.1:8801${path}`, { headers: { authorization: `Bearer ${"a".repeat(31)}` } });
+      expect(res.status, path).toBe(500);
+    }
+  });
+
+  test("a token of exactly 32 bytes is accepted", async () => {
+    await start(8802, "b".repeat(32));
+    const res = await fetch("http://127.0.0.1:8802/api/v1/forms", { headers: { authorization: `Bearer ${"b".repeat(32)}` } });
+    expect(res.status).toBe(200);
+  });
+});
 
 describe("api failures", () => {
   test("no token or a wrong token is 401", async () => {

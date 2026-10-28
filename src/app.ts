@@ -8,10 +8,11 @@ import { renderFillPage } from "./page.js";
 import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
+const MIN_TOKEN_BYTES = 32;
 
 export interface AppOptions {
   store?: Store;
-  /** Bearer token for /api/v1. With no token the API answers 503. There is no default. */
+  /** Bearer token for /api/v1, at least 32 bytes. createApp throws on a shorter one. With no token the API answers 503. There is no default. */
   apiToken?: string;
   /** Submits allowed per client in each window. Defaults to 20 a minute. Pass `false` to turn it off. */
   rateLimit?: { limit: number; windowMs: number } | false;
@@ -28,6 +29,9 @@ const PAGE_HEADERS = (nonce: string) => ({
 });
 
 export function createApp(options: AppOptions = {}) {
+  if (options.apiToken !== undefined && new TextEncoder().encode(options.apiToken).length < MIN_TOKEN_BYTES) {
+    throw new Error(`apiToken must be at least ${MIN_TOKEN_BYTES} bytes`);
+  }
   const store = options.store ?? createMemoryStore();
   const ops = createOps(store);
   const { repo, responses } = ops;

@@ -50,7 +50,7 @@ The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` c
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.
 
 The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: Bearer <token>`).
-Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. With no token the API answers 503.
+Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs at least 32 bytes. With a shorter token the Worker refuses to serve. With no token the API answers 503.
 
 ## Features
 

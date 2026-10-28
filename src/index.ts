@@ -6,3 +6,6 @@ export { SubmitError, createResponses, toCsv } from "./core/responses.js";
 export type { Response } from "./core/responses.js";
 export { createMemoryStore } from "./core/store.js";
 export type { Doc, Json, Page, Query, Region, Scalar, Store, StoreOps } from "./core/store.js";
+export { createApp } from "./app.js";
+export type { AppOptions } from "./app.js";
+export { renderFillPage } from "./page.js";

@@ -51,10 +51,20 @@ validateAnswers(form, { role: "dev" }).issues; // one "required" issue for "stac
 - `exportCsv` writes every response as CSV. It makes formula cells inert.
 - A `Store` interface with the same shape as the agentic-identity port.
 
+- A public fill page at `/f/<form id>`, served by the Worker. One HTML file, system
+  fonts, no CDN, no third-party script. A strict content security policy.
+- Built for WCAG 2.2 AA: labels, visible focus, 44px targets, a text error summary.
+- A rate limit per client, and a bot-check hook that is off by default.
+- GDPR: a privacy notice with a required consent box, and a retention period.
+  `purgeExpired` deletes responses past their date.
+
 ## Limits
 
 - The only store is in memory. Data is lost on exit.
-- No CLI, MCP server, HTTP API, or fill page yet.
+- The fill page needs JavaScript and does not show file questions.
+- The rate limit and the Worker store live in one isolate's memory.
+- You must call `purgeExpired` yourself. Nothing schedules it yet.
+- No CLI, MCP server, or `/api/v1` HTTP API yet.
 - A pattern rule runs as a JavaScript regular expression. Keep patterns simple.
 
 ## Develop

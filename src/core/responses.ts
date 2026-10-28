@@ -1,6 +1,6 @@
 import { validateAnswers, type Answers, type Form, type Issue } from "./form.js";
 import type { FormRepo } from "./repo.js";
-import type { Doc, Page, Store } from "./store.js";
+import type { Doc, Store } from "./store.js";
 
 const COLLECTION = "responses";
 
@@ -11,6 +11,10 @@ export type Response = {
   formVersion: number;
   submittedAt: string;
   values: Answers;
+  /** Set when the form has a notice and the respondent agreed. */
+  consent?: boolean;
+  /** Set when the form has a retention period. */
+  retainUntil?: string;
 };
 
 export class SubmitError extends Error {
@@ -39,7 +43,7 @@ export function createResponses(store: Store, repo: FormRepo) {
       where: { formId },
       orderBy: { field: "submittedAt" },
       ...options,
-    })) as unknown as Page & { items: { id: string; data: Response }[] };
+    })) as unknown as { items: { id: string; data: Response }[]; nextCursor?: string };
 
   return {
     list,
@@ -47,21 +51,44 @@ export function createResponses(store: Store, repo: FormRepo) {
     async submit(
       formId: string,
       answers: Answers,
-      options: { now?: () => number; id?: string } = {},
+      options: { now?: () => number; id?: string; consent?: boolean } = {},
     ): Promise<Response> {
       const form = await repo.getPublished(formId);
       if (!form) throw new Error(`form "${formId}" is not published`);
       const result = validateAnswers(form, answers);
-      if (!result.ok) throw new SubmitError(result.issues);
+      const issues = [...result.issues];
+      if (form.notice !== undefined && options.consent !== true) {
+        issues.push({ code: "consent_required", question: "consent", message: "agree to the notice first" });
+      }
+      if (issues.length > 0) throw new SubmitError(issues);
+      const at = (options.now ?? Date.now)();
       const response: Response = {
         id: options.id ?? crypto.randomUUID(),
         formId,
         formVersion: form.version,
-        submittedAt: new Date((options.now ?? Date.now)()).toISOString(),
+        submittedAt: new Date(at).toISOString(),
         values: result.answers,
+        ...(form.notice !== undefined ? { consent: true } : {}),
+        ...(form.retentionDays !== undefined ? { retainUntil: new Date(at + form.retentionDays * 86_400_000).toISOString() } : {}),
       };
       await store.put(COLLECTION, response.id, response as unknown as Doc);
       return response;
+    },
+    /** Deletes responses past their retention date. Returns the count. Rows with no date stay. */
+    async purgeExpired(formId: string, now: number = Date.now()): Promise<number> {
+      let purged = 0;
+      let cursor: string | undefined;
+      do {
+        const page = await list(formId, { cursor });
+        for (const { id, data } of page.items) {
+          if (data.retainUntil !== undefined && Date.parse(data.retainUntil) < now) {
+            await store.delete(COLLECTION, id);
+            purged++;
+          }
+        }
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
+      return purged;
     },
     /** Every response, across all versions. A question removed later stays a column. */
     async exportCsv(formId: string): Promise<string> {

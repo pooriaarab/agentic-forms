@@ -110,6 +110,11 @@ describe("answer validation failures", () => {
     expect(validateAnswers(f, { m: ["a", "a"] }).issues[0]?.code).toBe("invalid_choice");
   });
 
+  test("a question id like constructor reads as unanswered, not as a function", () => {
+    const f = form([q("constructor", { required: true })]);
+    expect(validateAnswers(f, {}).issues[0]?.code).toBe("required");
+  });
+
   test("an unknown question id is rejected", () => {
     expect(validateAnswers(form([q("a")]), { nope: "x" }).issues[0]?.code).toBe("unknown_question");
   });

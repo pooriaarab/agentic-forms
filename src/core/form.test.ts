@@ -155,3 +155,63 @@ describe("answer validation failures", () => {
     expect(validateAnswers(f, answers)).toMatchObject({ ok: true, answers });
   });
 });
+
+describe("hostile rules and inputs", () => {
+  test("a nested-quantifier pattern answers fast on hostile input", () => {
+    const f = form([q("t", { rules: { pattern: "(a+)+$" } })]);
+    const started = Date.now();
+    const result = validateAnswers(f, { t: `${"a".repeat(40)}!` });
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(result.issues.map((i) => i.code)).toEqual(["pattern"]);
+  });
+
+  test("a sequential-quantifier pattern answers fast on a long text", () => {
+    const f = form([q("t", { type: "long_text", rules: { pattern: "a*a*a*a*a*b" } })]);
+    const started = Date.now();
+    validateAnswers(f, { t: "a".repeat(5000) });
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  test("a backreference pattern is refused at save time", () => {
+    expect(codes(form([q("t", { rules: { pattern: "(a)\\1" } })]))).toEqual(["bad_rule"]);
+  });
+
+  test("a lookahead pattern is refused at save time", () => {
+    expect(codes(form([q("t", { rules: { pattern: "a(?=b)" } })]))).toEqual(["bad_rule"]);
+  });
+
+  test("a pattern over 256 characters is refused", () => {
+    expect(codes(form([q("t", { rules: { pattern: "a".repeat(257) } })]))).toEqual(["bad_rule"]);
+  });
+
+  test("a text over the matching cap is not matched", () => {
+    const f = form([q("t", { type: "long_text", rules: { pattern: "^a+$" } })]);
+    const issues = validateAnswers(f, { t: "a".repeat(5000) }).issues.map((i) => i.code);
+    expect(issues).toEqual(["too_long"]);
+  });
+
+  test("a rating with a huge or fractional span is refused", () => {
+    expect(codes(form([q("r", { type: "rating", rules: { max: 1e9 } })]))).toEqual(["bad_rule"]);
+    expect(codes(form([q("r", { type: "rating", rules: { min: 1.5, max: 5 } })]))).toEqual(["bad_rule"]);
+    expect(codes(form([q("r", { type: "rating", rules: { max: 10 } })]))).toEqual([]);
+  });
+
+  test("a question id named like an object member is not read as an answer", () => {
+    const f = form([q("constructor"), q("toString", { required: true })]);
+    const result = validateAnswers(f, {});
+    expect(result.issues).toEqual([expect.objectContaining({ code: "required", question: "toString" })]);
+    expect(visibleQuestions(form([q("a"), q("b", { showIf: { question: "a", op: "equals", value: "x" } })]), {}).length).toBe(1);
+  });
+
+  test("a condition with no value is refused unless the op is answered", () => {
+    const f = form([q("a"), q("b", { showIf: { question: "a", op: "equals" } })]);
+    expect(codes(f)).toEqual(["bad_condition"]);
+    const g = form([q("a"), q("b", { showIf: { question: "a", op: "gt", value: "5" } })]);
+    expect(codes(g)).toEqual(["bad_condition"]);
+  });
+
+  test("a required text with only spaces counts as empty", () => {
+    const f = form([q("a", { required: true })]);
+    expect(validateAnswers(f, { a: "   " }).issues[0]?.code).toBe("required");
+  });
+});

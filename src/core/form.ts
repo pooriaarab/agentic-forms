@@ -203,6 +203,19 @@ export function validateForm(form: Form): Issue[] {
   return issues;
 }
 
+/** Faults that block publishing but not saving a draft. A required file question has no upload on the fill page. */
+export function validateForPublish(form: Form): Issue[] {
+  const issues = validateForm(form);
+  for (const section of form.sections) {
+    for (const q of section.questions) {
+      if (q.type === "file" && q.required) {
+        issues.push({ code: "file_not_supported", question: q.id, message: "a required file question cannot be filled on the public page yet" });
+      }
+    }
+  }
+  return issues;
+}
+
 function checkQuestion(q: Question, add: (code: string, message: string, question?: string) => void): void {
   if (CHOICE_TYPES.includes(q.type)) {
     const choices = q.choices ?? [];

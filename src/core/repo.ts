@@ -1,4 +1,4 @@
-import { validateForm, type Form, type Issue } from "./form.js";
+import { validateForPublish, validateForm, type Form, type Issue } from "./form.js";
 import type { Doc, Store } from "./store.js";
 
 const HEADS = "forms";
@@ -69,7 +69,7 @@ export function createFormRepo(store: Store) {
         const head = (await tx.get(HEADS, id)) as unknown as Form | null;
         if (!head) throw new Error(`form "${id}" not found`);
         if (head.status === "published") throw new Error(`form "${id}" is already published`);
-        const issues = validateForm(head);
+        const issues = validateForPublish(head);
         if (issues.length > 0) throw new FormError(issues);
         if ((await tx.get(VERSIONS, `${id}@${head.version}`)) !== null) throw new SnapshotExistsError(id, head.version);
         const published: Form = { ...head, status: "published" };

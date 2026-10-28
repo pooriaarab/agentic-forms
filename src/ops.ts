@@ -1,0 +1,65 @@
+// The operations every face shares: SDK, CLI, MCP, and HTTP API call these.
+import { formSpecSchema, questionSchema } from "./core/schema.js";
+import type { Answers, Form } from "./core/form.js";
+import { createFormRepo } from "./core/repo.js";
+import { createResponses } from "./core/responses.js";
+import type { Store } from "./core/store.js";
+
+export class OpsError extends Error {
+  constructor(readonly kind: "not_found" | "conflict", message: string) {
+    super(message);
+    this.name = "OpsError";
+  }
+}
+
+export function createOps(store: Store) {
+  const repo = createFormRepo(store);
+  const responses = createResponses(store, repo);
+  const get = async (id: string): Promise<Form> => {
+    const form = await repo.get(id);
+    if (!form) throw new OpsError("not_found", `form "${id}" not found`);
+    return form;
+  };
+  return {
+    repo,
+    responses,
+    get,
+    /** Makes a form from a JSON spec. Throws ZodError, FormError, or OpsError. */
+    async create(spec: unknown, publish = false): Promise<Form> {
+      const parsed = formSpecSchema.parse(spec);
+      if (await repo.get(parsed.id)) throw new OpsError("conflict", `form "${parsed.id}" already exists`);
+      const draft = await repo.save({ ...parsed, version: 1, status: "draft" });
+      return publish ? repo.publish(draft.id) : draft;
+    },
+    async addQuestion(formId: string, question: unknown, sectionId?: string): Promise<Form> {
+      const form = await get(formId);
+      const section = sectionId === undefined ? form.sections[0] : form.sections.find((s) => s.id === sectionId);
+      if (!section) throw new OpsError("not_found", `section "${sectionId}" not found`);
+      const sections = form.sections.map((s) => (s === section ? { ...s, questions: [...s.questions, questionSchema.parse(question)] } : s));
+      return repo.save({ ...form, sections });
+    },
+    async publish(formId: string): Promise<Form> {
+      await get(formId);
+      return repo.publish(formId);
+    },
+    async submit(formId: string, answers: Answers, consent = false) {
+      await get(formId);
+      return responses.submit(formId, answers, { consent });
+    },
+    async listResponses(formId: string, options: { limit?: number; cursor?: string } = {}) {
+      await get(formId);
+      const page = await responses.list(formId, options);
+      return { items: page.items.map((entry) => entry.data), nextCursor: page.nextCursor };
+    },
+    async exportCsv(formId: string) {
+      await get(formId);
+      return responses.exportCsv(formId);
+    },
+    async purge(formId: string) {
+      await get(formId);
+      return { purged: await responses.purgeExpired(formId) };
+    },
+  };
+}
+
+export type Ops = ReturnType<typeof createOps>;

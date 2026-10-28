@@ -10,13 +10,27 @@ Build forms and collect answers into tables.
 ## Use the SDK
 
 ```js
-import { validateAnswers, validateForm } from "agentic-forms";
+import { createFileStore, createOps } from "agentic-forms";
 
-validateForm(myForm); // [] when the logic is sound
-validateAnswers(myForm, { q1: "yes" }); // { ok, issues, answers }
+const ops = createOps(createFileStore("forms.json"));
+await ops.create(spec, true); // spec matches formSpecSchema; true publishes
+await ops.submit("poll", { color: "red" });
+await ops.exportCsv("poll");
 ```
+
+## Use the CLI
+
+```sh
+agentic-forms new poll --title "Poll"
+agentic-forms from-prompt --spec spec.json --publish
+agentic-forms responses poll
+```
+
+## Use the MCP server
+
+Start it with `agentic-forms mcp`. See AGENTS.md for the tools.
 
 ## Rules
 
-- Report each issue as a failure.
+- Report each error as a failure.
 - Do not point a condition at a later or deleted question.

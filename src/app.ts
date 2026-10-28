@@ -1,7 +1,9 @@
 import { Hono } from "hono";
-import { SubmitError, createResponses } from "./core/responses.js";
-import { createFormRepo } from "./core/repo.js";
+import { ZodError } from "zod";
+import { SubmitError } from "./core/responses.js";
+import { FormError } from "./core/repo.js";
 import { createMemoryStore, type Store } from "./core/store.js";
+import { OpsError, createOps } from "./ops.js";
 import { renderFillPage } from "./page.js";
 import { VERSION } from "./version.js";
 
@@ -9,6 +11,8 @@ const MAX_BODY = 65_536;
 
 export interface AppOptions {
   store?: Store;
+  /** Bearer token for /api/v1. With no token the API answers 503. There is no default. */
+  apiToken?: string;
   /** Submits allowed per client in each window. Defaults to 20 a minute. Pass `false` to turn it off. */
   rateLimit?: { limit: number; windowMs: number } | false;
   /** Off by default. Return false to refuse a submit. Plug a check here that runs on your own host. */
@@ -25,8 +29,8 @@ const PAGE_HEADERS = (nonce: string) => ({
 
 export function createApp(options: AppOptions = {}) {
   const store = options.store ?? createMemoryStore();
-  const repo = createFormRepo(store);
-  const responses = createResponses(store, repo);
+  const ops = createOps(store);
+  const { repo, responses } = ops;
   const now = options.now ?? Date.now;
   const limit = options.rateLimit === false ? undefined : (options.rateLimit ?? { limit: 20, windowMs: 60_000 });
   // Client keys live in memory only. They are never stored or logged.
@@ -83,5 +87,46 @@ export function createApp(options: AppOptions = {}) {
     return c.json({ ok: true }, 201, { "cache-control": "no-store" });
   });
 
+  app.use("/api/v1/*", async (c, next) => {
+    if (!options.apiToken) return c.json({ error: "api_disabled" }, 503);
+    if (!(await sameSecret(c.req.header("authorization") ?? "", `Bearer ${options.apiToken}`))) return c.json({ error: "unauthorized" }, 401);
+    await next();
+  });
+  const forms = "/api/v1/forms";
+  app.post(forms, async (c) => {
+    const { publish, ...spec } = await c.req.json();
+    return c.json(await ops.create(spec, publish === true), 201);
+  });
+  app.get(forms, async (c) => c.json({ forms: await repo.list() }));
+  app.get(`${forms}/:id`, async (c) => c.json(await ops.get(c.req.param("id"))));
+  app.post(`${forms}/:id/questions`, async (c) => {
+    const { question, section } = await c.req.json();
+    return c.json(await ops.addQuestion(c.req.param("id"), question, section), 201);
+  });
+  app.post(`${forms}/:id/publish`, async (c) => c.json(await ops.publish(c.req.param("id"))));
+  app.get(`${forms}/:id/responses`, async (c) => {
+    const limit = c.req.query("limit");
+    return c.json(await ops.listResponses(c.req.param("id"), { limit: limit ? Number(limit) : undefined, cursor: c.req.query("cursor") }));
+  });
+  app.get(`${forms}/:id/export`, async (c) =>
+    c.body(await ops.exportCsv(c.req.param("id")), 200, { "content-type": "text/csv; charset=utf-8", "cache-control": "no-store" }),
+  );
+  app.post(`${forms}/:id/purge`, async (c) => c.json(await ops.purge(c.req.param("id"))));
+
+  app.onError((error, c) => {
+    if (error instanceof OpsError) return c.json({ error: error.kind, message: error.message }, error.kind === "not_found" ? 404 : 409);
+    if (error instanceof FormError || error instanceof SubmitError) return c.json({ error: "invalid", issues: error.issues }, 422);
+    if (error instanceof ZodError) return c.json({ error: "invalid_spec", issues: error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) }, 400);
+    if (error instanceof SyntaxError) return c.json({ error: "bad_json" }, 400);
+    return c.json({ error: "internal" }, 500);
+  });
+
   return app;
+}
+
+/** Compares two secrets in constant time by comparing their digests. */
+async function sameSecret(a: string, b: string): Promise<boolean> {
+  const digest = async (text: string) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+  const [x, y] = await Promise.all([digest(a), digest(b)]);
+  return x.reduce((diff, byte, i) => diff | (byte ^ y[i]), 0) === 0;
 }

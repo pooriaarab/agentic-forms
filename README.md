@@ -7,7 +7,7 @@
 
 Build forms and collect answers into tables.
 
-> Status: early development. It is not on npm yet. Only the library below works.
+> Status: early development. It is not on npm yet. The library, CLI, MCP server, and Worker work.
 
 ## Install
 
@@ -34,6 +34,24 @@ validateAnswers(form, { role: "other" }).ok; // true: "stack" stays hidden
 validateAnswers(form, { role: "dev" }).issues; // one "required" issue for "stack"
 ```
 
+## Use it
+
+```sh
+npx agentic-forms new poll --title "Poll"
+npx agentic-forms add-question poll --id color --type single_choice --label Color --choices red,blue --required
+npx agentic-forms publish poll
+npx agentic-forms responses poll
+npx agentic-forms export poll > poll.csv
+npx agentic-forms from-prompt --spec spec.json --publish   # an agent writes the JSON spec
+npx agentic-forms mcp                                      # MCP tools on stdio
+```
+
+The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it).
+`from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.
+
+The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: Bearer <token>`).
+Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. With no token the API answers 503.
+
 ## Features
 
 - Ten question types: short text, long text, number, email, single choice,
@@ -49,6 +67,7 @@ validateAnswers(form, { role: "dev" }).issues; // one "required" issue for "stac
 - Versions: `publish` freezes a version. Editing a published form starts a new
   draft. Old responses stay readable against their own version.
 - `exportCsv` writes every response as CSV. It makes formula cells inert.
+- Agent tools: eight MCP tools and one CLI command each for make, extend, publish, submit, list, export, and purge.
 - A `Store` interface with the same shape as the agentic-identity port.
 
 - A public fill page at `/f/<form id>`, served by the Worker. One HTML file, system
@@ -64,7 +83,8 @@ validateAnswers(form, { role: "dev" }).issues; // one "required" issue for "stac
 - The fill page needs JavaScript and does not show file questions.
 - The rate limit and the Worker store live in one isolate's memory.
 - You must call `purgeExpired` yourself. Nothing schedules it yet.
-- No CLI, MCP server, or `/api/v1` HTTP API yet.
+- No sharing, roles, or sign-in yet. The API uses one shared token.
+- The page test runs the page script in jsdom, not in a real browser.
 - A pattern rule runs as a JavaScript regular expression. Keep patterns simple.
 
 ## Develop

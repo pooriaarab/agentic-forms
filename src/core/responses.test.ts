@@ -66,10 +66,10 @@ describe("versions keep old responses readable", () => {
     const { repo, responses } = setup();
     await repo.save(form([q("old"), q("keep")]));
     await repo.publish("f");
-    await responses.submit("f", { old: "o", keep: "k" });
+    await responses.submit("f", { old: "o", keep: "k" }, { now: () => 1_000 });
     await repo.save(form([q("keep"), q("added")]));
     await repo.publish("f");
-    await responses.submit("f", { keep: "k2", added: "n" });
+    await responses.submit("f", { keep: "k2", added: "n" }, { now: () => 2_000 });
     const lines = (await responses.exportCsv("f")).trim().split("\n");
     expect(lines[0]).toBe("response_id,submitted_at,form_version,keep,added,old");
     expect(lines[1].split(",").slice(2)).toEqual(["1", "k", "", "o"]);

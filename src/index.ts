@@ -9,3 +9,9 @@ export type { Doc, Json, Page, Query, Region, Scalar, Store, StoreOps } from "./
 export { createApp } from "./app.js";
 export type { AppOptions } from "./app.js";
 export { renderFillPage } from "./page.js";
+export { OpsError, createOps } from "./ops.js";
+export type { Ops } from "./ops.js";
+export { formSpecSchema, questionSchema } from "./core/schema.js";
+export type { FormSpec, QuestionSpec } from "./core/schema.js";
+export { createFileStore } from "./core/file-store.js";
+export { createMcpServer } from "./mcp.js";

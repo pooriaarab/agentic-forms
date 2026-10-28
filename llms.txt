@@ -4,7 +4,9 @@ Build forms and collect answers into tables.
 
 Keywords: forms,surveys,responses,agents,mcp,cli,tables,collaboration.
 
-- SDK: import { validateForm, validateAnswers } from "agentic-forms".
+- SDK: import { createOps, createFileStore } from "agentic-forms".
+- CLI: agentic-forms --help.
+- MCP: run agentic-forms mcp, then call new_form.
 
 ## Docs
 

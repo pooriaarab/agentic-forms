@@ -61,8 +61,8 @@ export function createApp(options: AppOptions = {}) {
     const id = c.req.param("id");
     if (!(await repo.getPublished(id))) return c.json({ error: "not_found" }, 404);
     if (Number(c.req.header("content-length") ?? 0) > MAX_BODY) return c.json({ error: "too_large" }, 413);
-    const text = await c.req.text();
-    if (text.length > MAX_BODY) return c.json({ error: "too_large" }, 413);
+    const text = await readCapped(c.req.raw, MAX_BODY);
+    if (text === undefined) return c.json({ error: "too_large" }, 413);
     let body: Record<string, unknown>;
     try {
       body = JSON.parse(text);
@@ -84,4 +84,29 @@ export function createApp(options: AppOptions = {}) {
   });
 
   return app;
+}
+
+/** Reads the body as text and counts bytes as they arrive. Returns undefined, and stops reading, past the cap. */
+async function readCapped(request: Request, cap: number): Promise<string | undefined> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > cap) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }

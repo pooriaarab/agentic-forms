@@ -67,6 +67,8 @@ const PATTERN_CAP = 256;
 /** A text answer longer than this is refused before any pattern runs. */
 const PATTERN_INPUT_CAP = 1000;
 const RATING_SPAN_CAP = 20;
+/** Fixed columns of a response row. A question cannot reuse them. */
+const RESERVED_IDS = ["response_id", "submitted_at", "form_version"];
 
 const own = (answers: Answers, id: string): AnswerValue | undefined =>
   Object.prototype.hasOwnProperty.call(answers, id) ? answers[id] : undefined;
@@ -128,6 +130,7 @@ export function validateForm(form: Form): Issue[] {
     if (sectionIds.has(section.id)) add("duplicate_id", `section "${section.id}" repeats`);
     sectionIds.add(section.id);
     for (const q of section.questions) {
+      if (RESERVED_IDS.includes(q.id)) add("reserved_id", `"${q.id}" is a fixed column name`, q.id);
       if (index.has(q.id)) add("duplicate_id", `question "${q.id}" repeats`, q.id);
       else index.set(q.id, count);
       count++;

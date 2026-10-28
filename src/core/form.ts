@@ -1,4 +1,5 @@
 // The form model, its logic checks, and answer validation. Pure code: no I/O.
+import { RE2JS } from "re2js";
 
 export type QuestionType =
   | "short_text"
@@ -15,7 +16,7 @@ export type QuestionType =
 export type Rules = {
   minLength?: number;
   maxLength?: number;
-  /** A regular expression, up to 200 characters. Applies to text answers. */
+  /** A regular expression, up to 256 characters, in the linear-time RE2 syntax (no backreferences or lookaround). Applies to text answers. */
   pattern?: string;
   /** Number range, rating start, or the count range of a multi choice. */
   min?: number;
@@ -62,13 +63,21 @@ export type Issue = { code: string; message: string; question?: string };
 
 const CHOICE_TYPES: QuestionType[] = ["single_choice", "multi_choice", "dropdown"];
 const TEXT_CAP: Partial<Record<QuestionType, number>> = { short_text: 1000, long_text: 20000 };
-const PATTERN_CAP = 200;
+const PATTERN_CAP = 256;
+/** A text answer longer than this is refused before any pattern runs. */
+const PATTERN_INPUT_CAP = 1000;
+const RATING_SPAN_CAP = 20;
+
+const own = (answers: Answers, id: string): AnswerValue | undefined =>
+  Object.prototype.hasOwnProperty.call(answers, id) ? answers[id] : undefined;
+
+const compilePattern = (pattern: string): RE2JS => RE2JS.compile(pattern);
 
 const isEmpty = (value: AnswerValue | undefined): boolean =>
-  value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+  value === undefined || (typeof value === "string" && value.trim() === "") || (Array.isArray(value) && value.length === 0);
 
 function matches(condition: Condition, answers: Answers): boolean {
-  const answer = answers[condition.question];
+  const answer = own(answers, condition.question);
   const { value } = condition;
   const equals = Array.isArray(answer) ? answer.includes(value as string) : answer === value;
   switch (condition.op) {
@@ -92,13 +101,13 @@ function matches(condition: Condition, answers: Answers): boolean {
 
 /** The questions a respondent sees, in order. Hidden answers never feed later logic. */
 export function visibleQuestions(form: Form, answers: Answers): Question[] {
-  const seen: Answers = {};
+  const seen: Answers = Object.create(null);
   const shown: Question[] = [];
   for (const section of form.sections) {
     if (section.showIf && !matches(section.showIf, seen)) continue;
     for (const question of section.questions) {
       if (question.showIf && !matches(question.showIf, seen)) continue;
-      const answer = answers[question.id];
+      const answer = own(answers, question.id);
       if (answer !== undefined) seen[question.id] = answer;
       shown.push(question);
     }
@@ -133,6 +142,11 @@ export function validateForm(form: Form): Issue[] {
     const list = edges.get(from) ?? [];
     edges.set(from, list);
     if (!cond) return;
+    if (cond.op !== "answered" && cond.value === undefined) {
+      add("bad_condition", `logic "${cond.op}" needs a value`, label);
+    } else if ((cond.op === "gt" || cond.op === "lt") && typeof cond.value !== "number") {
+      add("bad_condition", `logic "${cond.op}" needs a number`, label);
+    }
     if (!index.has(cond.question)) {
       add("unknown_reference", `logic reads missing question "${cond.question}"`, label);
       return;
@@ -192,12 +206,19 @@ function checkQuestion(q: Question, add: (code: string, message: string, questio
     if (r[key] !== undefined && !Number.isFinite(r[key])) bad(`${key} must be a number`);
   }
   if (r.min !== undefined && r.max !== undefined && r.min > r.max) bad("min is above max");
+  if (q.type === "rating") {
+    const min = r.min ?? 1;
+    const max = r.max ?? 5;
+    if (!Number.isInteger(min) || !Number.isInteger(max) || max - min + 1 > RATING_SPAN_CAP) {
+      bad(`a rating needs whole numbers that span ${RATING_SPAN_CAP} steps or fewer`);
+    }
+  }
   if (r.pattern !== undefined) {
     try {
-      if (r.pattern.length > PATTERN_CAP) throw new Error("long");
-      new RegExp(r.pattern);
+      if (typeof r.pattern !== "string" || r.pattern.length > PATTERN_CAP) throw new Error("long");
+      compilePattern(r.pattern);
     } catch {
-      bad(`pattern must be a valid expression of ${PATTERN_CAP} characters or fewer`);
+      bad(`pattern must be a valid RE2 expression (no backreferences or lookaround) of ${PATTERN_CAP} characters or fewer`);
     }
   }
 }
@@ -214,7 +235,7 @@ export function validateAnswers(form: Form, answers: Answers): AnswerResult {
   }
   const cleaned: Answers = {};
   for (const q of visibleQuestions(form, answers)) {
-    const value = answers[q.id];
+    const value = own(answers, q.id);
     if (isEmpty(value)) {
       if (q.required) add("required", q.id, "this question needs an answer");
       continue;
@@ -237,7 +258,11 @@ function checkAnswer(q: Question, value: AnswerValue, add: (code: string, messag
       if (typeof value !== "string") return wrong();
       if (value.length > (r.maxLength ?? TEXT_CAP[q.type]!) || value.length > TEXT_CAP[q.type]!) add("too_long", "the answer is too long");
       if (r.minLength !== undefined && value.length < r.minLength) add("too_short", "the answer is too short");
-      if (r.pattern !== undefined && !new RegExp(r.pattern).test(value)) add("pattern", "the answer has the wrong format");
+      if (r.pattern !== undefined) {
+        if (value.length > PATTERN_INPUT_CAP) {
+          if (value.length <= TEXT_CAP[q.type]!) add("too_long", "the answer is too long for its format rule");
+        } else if (!compilePattern(r.pattern).matcher(value).find()) add("pattern", "the answer has the wrong format");
+      }
       return;
     }
     case "number":

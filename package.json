@@ -38,10 +38,6 @@
       "import": "./dist/index.js"
     }
   },
-  "bin": {
-    "agentic-forms": "./dist/cli.js",
-    "agentic-forms-mcp": "./dist/mcp-bin.js"
-  },
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",

@@ -47,7 +47,7 @@ validateAnswers(form, { role: "dev" }).issues; // one "required" issue for "stac
 ## Limits
 
 - No store, responses, CLI, MCP server, HTTP API, or fill page yet.
-- A pattern rule runs as a JavaScript regular expression. Keep patterns simple.
+- A pattern rule uses RE2 syntax and runs in linear time. Backreferences and lookaround are refused. A pattern has up to 256 characters, and a text with a pattern rule has up to 1000.
 
 ## Develop
 

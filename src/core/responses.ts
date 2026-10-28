@@ -44,12 +44,20 @@ const stillRetained = (retainUntil: unknown, now: number): boolean =>
   typeof retainUntil === "string" && ISO_TIME.test(retainUntil) && Date.parse(retainUntil) >= now;
 
 export function createResponses(store: Store, repo: FormRepo) {
-  const list = async (formId: string, options: { limit?: number; cursor?: string } = {}) =>
+  type Page = { items: { id: string; data: Response }[]; nextCursor?: string };
+  const rawList = async (formId: string, options: { limit?: number; cursor?: string } = {}) =>
     (await store.query(COLLECTION, {
       where: { formId },
       orderBy: { field: "submittedAt" },
       ...options,
-    })) as unknown as { items: { id: string; data: Response }[]; nextCursor?: string };
+    })) as unknown as Page;
+  /** A row with no retain date stays. A row past its date, or with a bad date, is not shown. */
+  const isLive = (data: Response, now: number) => data.retainUntil === undefined || stillRetained(data.retainUntil, now);
+  const list = async (formId: string, options: { limit?: number; cursor?: string; now?: number } = {}): Promise<Page> => {
+    const { now = Date.now(), ...query } = options;
+    const page = await rawList(formId, query);
+    return { ...page, items: page.items.filter((entry) => isLive(entry.data, now)) };
+  };
 
   return {
     list,
@@ -85,9 +93,9 @@ export function createResponses(store: Store, repo: FormRepo) {
       let purged = 0;
       let cursor: string | undefined;
       do {
-        const page = await list(formId, { cursor });
+        const page = await rawList(formId, { cursor });
         for (const { id, data } of page.items) {
-          if (data.retainUntil !== undefined && !stillRetained(data.retainUntil, now)) {
+          if (!isLive(data, now)) {
             await store.delete(COLLECTION, id);
             purged++;
           }
@@ -96,12 +104,12 @@ export function createResponses(store: Store, repo: FormRepo) {
       } while (cursor !== undefined);
       return purged;
     },
-    /** Every response, across all versions. A question removed later stays a column. */
-    async exportCsv(formId: string): Promise<string> {
+    /** Every response still within retention, across all versions. A question removed later stays a column. */
+    async exportCsv(formId: string, now: number = Date.now()): Promise<string> {
       const rows: Response[] = [];
       let cursor: string | undefined;
       do {
-        const page = await list(formId, { cursor });
+        const page = await list(formId, { cursor, now });
         rows.push(...page.items.map((entry) => entry.data as unknown as Response));
         cursor = page.nextCursor;
       } while (cursor !== undefined);

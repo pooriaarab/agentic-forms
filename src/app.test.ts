@@ -1,6 +1,9 @@
 // Ways the public page and its submit route can fail. Written before the code.
 // Each test drives the real Hono app through its fetch handler.
-import { beforeEach, describe, expect, test } from "vitest";
+import { request as httpRequest, createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { Readable } from "node:stream";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createApp } from "./app.js";
 import type { Form } from "./core/form.js";
 import { createFormRepo } from "./core/repo.js";
@@ -152,12 +155,12 @@ describe("retention", () => {
     await responses.submit("f", { name: "old" }, { now: () => 0 });
     await responses.submit("f", { name: "new" }, { now: () => 2 * day });
     expect(await responses.purgeExpired("f", 1.5 * day)).toBe(1);
-    expect((await responses.list("f")).items.map((r) => r.data.values.name)).toEqual(["new"]);
+    expect((await responses.list("f", { now: 1.5 * day })).items.map((r) => r.data.values.name)).toEqual(["new"]);
     await repo.save(base({ retentionDays: undefined }));
     await repo.publish("f");
     await responses.submit("f", { name: "forever" }, { now: () => 0 });
     expect(await responses.purgeExpired("f", 99 * day)).toBe(1);
-    expect((await responses.list("f")).items.map((r) => r.data.values.name)).toContain("forever");
+    expect((await responses.list("f", { now: 99 * day })).items.map((r) => r.data.values.name)).toContain("forever");
   });
 
   test("a row with a retain date that is not a date is purged, not kept", async () => {
@@ -168,7 +171,30 @@ describe("retention", () => {
       await store.put("responses", id, { ...keep, id, retainUntil } as never);
     }
     expect(await responses.purgeExpired("f", day)).toBe(5);
-    expect((await responses.list("f")).items.map((r) => r.id)).toEqual([keep.id]);
+    expect((await responses.list("f", { now: 0 })).items.map((r) => r.id)).toEqual([keep.id]);
+  });
+
+  test("list and export drop expired rows before any purge runs", async () => {
+    await publish(base({ retentionDays: 1 }));
+    const day = 86_400_000;
+    await responses.submit("f", { name: "old" }, { now: () => 0 });
+    await responses.submit("f", { name: "new" }, { now: () => 2 * day });
+    const at = 1.5 * day;
+    expect((await responses.list("f", { now: at })).items.map((r) => r.data.values.name)).toEqual(["new"]);
+    const csv = await responses.exportCsv("f", at);
+    expect(csv).toContain("new");
+    expect(csv).not.toContain("old");
+    // Nothing was purged: the old row is still stored, only hidden.
+    expect(await responses.purgeExpired("f", at)).toBe(1);
+  });
+
+  test("the API list and export hide an expired row by the real clock", async () => {
+    await publish(base({ retentionDays: 1 }));
+    await responses.submit("f", { name: "stale" }, { now: () => 0 });
+    await responses.submit("f", { name: "fresh" });
+    const live = (await responses.list("f")).items.map((r) => r.data.values.name);
+    expect(live).toEqual(["fresh"]);
+    expect(await responses.exportCsv("f")).not.toContain("stale");
   });
 
   test("a form with a required file question cannot be published", async () => {
@@ -184,5 +210,75 @@ describe("retention", () => {
   test("a retention of zero or a fraction is an unsound form", async () => {
     await expect(repo.save(base({ retentionDays: 0 }))).rejects.toThrow("retention");
     await expect(repo.save(base({ retentionDays: 1.5 }))).rejects.toThrow("retention");
+  });
+});
+
+
+describe("body cap while streaming", () => {
+  const CAP = 65_536;
+  let server: Server | undefined;
+  afterEach(() => server?.close());
+
+  test("a stream with no length is cut off past the cap and 413 is the answer", async () => {
+    await publish(base());
+    const app = createApp({ store, rateLimit: false });
+    let pulled = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1024;
+        controller.enqueue(new Uint8Array(1024).fill(120));
+      },
+    });
+    const res = await app.request("/f/f", { method: "POST", headers: { "content-type": "application/json" }, body: endless, duplex: "half" } as RequestInit);
+    expect(res.status).toBe(413);
+    expect(pulled).toBeLessThan(CAP * 4);
+    expect((await responses.list("f")).items).toEqual([]);
+  });
+
+  test("a body of multi-byte text is counted in bytes, not characters", async () => {
+    await publish(base());
+    const app = createApp({ store, rateLimit: false });
+    const name = "é".repeat(CAP / 2 + 100); // fewer characters than the cap, more bytes
+    const body = JSON.stringify({ answers: { name } });
+    expect(body.length).toBeLessThan(CAP);
+    expect(new TextEncoder().encode(body).length).toBeGreaterThan(CAP);
+    expect((await post(app, body)).status).toBe(413);
+  });
+
+  // Real HTTP: node sends the body with Transfer-Encoding: chunked and no Content-Length.
+  async function sendChunked(chunks: string[]): Promise<{ status: number; sawLength: boolean }> {
+    const app = createApp({ store, rateLimit: false });
+    let sawLength = true;
+    server = createServer(async (req, res) => {
+      sawLength = req.headers["content-length"] !== undefined;
+      const response = await app.fetch(new Request(`http://localhost${req.url}`, { method: req.method, headers: { "content-type": "application/json" }, body: Readable.toWeb(req) as ReadableStream, duplex: "half" } as RequestInit));
+      res.writeHead(response.status).end(await response.text());
+    });
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    return new Promise((resolve, reject) => {
+      const req = httpRequest({ port, host: "127.0.0.1", path: "/f/f", method: "POST", headers: { "content-type": "application/json" } }, (res) => {
+        res.resume();
+        res.on("end", () => resolve({ status: res.statusCode!, sawLength }));
+      });
+      req.on("error", (error) => ((error as NodeJS.ErrnoException).code === "EPIPE" || (error as NodeJS.ErrnoException).code === "ECONNRESET" ? undefined : reject(error)));
+      for (const chunk of chunks) req.write(chunk);
+      req.end();
+    });
+  }
+
+  test("e2e: a chunked body over the cap is refused with 413", async () => {
+    await publish(base());
+    const filler = "x".repeat(8192);
+    const result = await sendChunked(['{"answers":{"name":"', ...Array(12).fill(filler), '"}}']);
+    expect(result).toEqual({ status: 413, sawLength: false });
+    expect((await responses.list("f")).items).toEqual([]);
+  });
+
+  test("e2e: a small chunked body is accepted", async () => {
+    await publish(base());
+    const result = await sendChunked(['{"answers":', '{"name":"Ada"}}']);
+    expect(result).toEqual({ status: 201, sawLength: false });
+    expect((await responses.list("f")).items.map((r) => r.data.values.name)).toEqual(["Ada"]);
   });
 });

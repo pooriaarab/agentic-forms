@@ -1,2 +1,8 @@
 export { VERSION } from "./version.js";
 export * from "./core/form.js";
+export { FormError, createFormRepo } from "./core/repo.js";
+export type { FormRepo } from "./core/repo.js";
+export { SubmitError, createResponses, toCsv } from "./core/responses.js";
+export type { Response } from "./core/responses.js";
+export { createMemoryStore } from "./core/store.js";
+export type { Doc, Json, Page, Query, Region, Scalar, Store, StoreOps } from "./core/store.js";

@@ -44,9 +44,17 @@ validateAnswers(form, { role: "dev" }).issues; // one "required" issue for "stac
   and repeated ids all fail `validateForm`.
 - Answer checks: hidden questions never block a submit, and their answers are dropped.
 
+- Responses: `submit` checks answers against the newest published version and
+  stores one row per response, keyed by question id.
+- Versions: `publish` freezes a version. Editing a published form starts a new
+  draft. Old responses stay readable against their own version.
+- `exportCsv` writes every response as CSV. It makes formula cells inert.
+- A `Store` interface with the same shape as the agentic-identity port.
+
 ## Limits
 
-- No store, responses, CLI, MCP server, HTTP API, or fill page yet.
+- The only store is in memory. Data is lost on exit.
+- No CLI, MCP server, HTTP API, or fill page yet.
 - A pattern rule runs as a JavaScript regular expression. Keep patterns simple.
 
 ## Develop

@@ -21,7 +21,7 @@
   "type": "module",
   "private": false,
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "files": [
     "dist"
@@ -38,10 +38,6 @@
       "import": "./dist/index.js"
     }
   },
-  "bin": {
-    "agentic-forms": "./dist/cli.js",
-    "agentic-forms-mcp": "./dist/mcp-bin.js"
-  },
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
@@ -51,6 +47,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "re2js": "^2.9.1",
     "zod": "^3.25.0"
   },
   "devDependencies": {

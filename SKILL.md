@@ -10,26 +10,13 @@ Build forms and collect answers into tables.
 ## Use the SDK
 
 ```js
-import { summarizeText, dispatchText } from "agentic-forms";
+import { validateAnswers, validateForm } from "agentic-forms";
 
-summarizeText("some text");
-await dispatchText("some text", { dryRun: true });
+validateForm(myForm); // [] when the logic is sound
+validateAnswers(myForm, { q1: "yes" }); // { ok, issues, answers }
 ```
-
-## Use the CLI
-
-```sh
-agentic-forms summary --text "some text"
-agentic-forms dispatch --text "some text" --dry-run
-```
-
-## Use the MCP server
-
-Start the server with `agentic-forms mcp`. Call `summarize_text`
-for stats, `dispatch_text` for routes, `get_cost_report` for costs.
 
 ## Rules
 
-- Preview each route with dry run first.
-- Report guard denials and adapter errors as failures.
-- Read the cost report at the end.
+- Report each issue as a failure.
+- Do not point a condition at a later or deleted question.

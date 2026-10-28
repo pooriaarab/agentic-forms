@@ -7,33 +7,53 @@
 
 Build forms and collect answers into tables.
 
-> Status: scaffold. This repository holds the starter code only. It is not on npm
-> yet, and none of the features below work yet.
+> Status: early development. It is not on npm yet. Only the library below works.
 
-## Planned features
+## Install
 
-- A form builder with common question types and logic.
-- A public link to collect answers, with bot protection.
-- Answers stored as rows you can export.
-- Agent tools: make a form from a prompt and read the answers.
-- Notices when a new answer comes in.
-- Share by invite or link, with roles.
+```sh
+npm install agentic-forms
+```
 
-## Surfaces
+## Quick start
 
-One package gives you each way in:
+```ts
+import { validateAnswers, validateForm, type Form } from "agentic-forms";
 
-- **Library and SDK**: `import { ... } from "agentic-forms"`.
-- **CLI**: `npx agentic-forms --help`.
-- **MCP server**: `npx agentic-forms mcp`, for Claude Code and other MCP clients.
-- **HTTP API**: a Cloudflare Worker you deploy to your own account.
-- **Web UI**: a small app served by the same Worker.
+const form: Form = {
+  id: "survey", title: "Survey", version: 1, status: "draft",
+  sections: [{ id: "main", title: "Main", questions: [
+    { id: "role", type: "single_choice", label: "Role", required: true, choices: ["dev", "other"] },
+    { id: "stack", type: "short_text", label: "Stack", required: true,
+      showIf: { question: "role", op: "equals", value: "dev" } },
+  ] }],
+};
+
+validateForm(form); // []
+validateAnswers(form, { role: "other" }).ok; // true: "stack" stays hidden
+validateAnswers(form, { role: "dev" }).issues; // one "required" issue for "stack"
+```
+
+## Features
+
+- Ten question types: short text, long text, number, email, single choice,
+  multi choice, dropdown, date, rating, and file reference.
+- Required flags, length, pattern, and range rules.
+- Sections and conditions: show a question or a section when an earlier answer matches.
+- Form checks: a logic cycle, logic that reads a later or deleted question,
+  and repeated ids all fail `validateForm`.
+- Answer checks: hidden questions never block a submit, and their answers are dropped.
+
+## Limits
+
+- No store, responses, CLI, MCP server, HTTP API, or fill page yet.
+- A pattern rule uses RE2 syntax and runs in linear time. Backreferences and lookaround are refused. A pattern has up to 256 characters, and a text with a pattern rule has up to 1000.
 
 ## Develop
 
 ```sh
 npm ci
-npm run build && npm run typecheck && npm test
+npm run ci:local
 ```
 
 ## License

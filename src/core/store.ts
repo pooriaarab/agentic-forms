@@ -104,8 +104,19 @@ function storeOps(tables: Tables): StoreOps {
   };
 }
 
-export function createMemoryStore(options: { region?: Region } = {}): Store {
-  let tables: Tables = new Map();
+export type Dump = Record<string, Record<string, Doc>>;
+
+export interface MemoryStoreOptions {
+  region?: Region;
+  /** Docs to start with. */
+  initial?: Dump;
+  /** Called with all data after each write. A file store saves here. */
+  onWrite?: (data: Dump) => void;
+}
+
+export function createMemoryStore(options: MemoryStoreOptions = {}): Store {
+  let tables: Tables = new Map(Object.entries(options.initial ?? {}).map(([name, docs]) => [name, new Map(Object.entries(docs))]));
+  const dump = (): Dump => Object.fromEntries([...tables].map(([name, docs]) => [name, Object.fromEntries(docs)]));
   let lock: Promise<unknown> = Promise.resolve();
   // One operation at a time, so a transaction sees no other writer.
   const exclusive = <R>(fn: () => Promise<R>): Promise<R> => {
@@ -116,14 +127,15 @@ export function createMemoryStore(options: { region?: Region } = {}): Store {
   return {
     region: options.region ?? "eu",
     get: (c, id) => exclusive(() => storeOps(tables).get(c, id)),
-    put: (c, id, doc) => exclusive(() => storeOps(tables).put(c, id, doc)),
-    delete: (c, id) => exclusive(() => storeOps(tables).delete(c, id)),
+    put: (c, id, doc) => exclusive(() => storeOps(tables).put(c, id, doc).then(() => options.onWrite?.(dump()))),
+    delete: (c, id) => exclusive(() => storeOps(tables).delete(c, id).then(() => options.onWrite?.(dump()))),
     query: (c, q) => exclusive(() => storeOps(tables).query(c, q)),
     transaction: (fn) =>
       exclusive(async () => {
         const draft: Tables = new Map([...tables].map(([name, docs]) => [name, new Map(docs)]));
         const result = await fn(storeOps(draft));
         tables = draft;
+        options.onWrite?.(dump());
         return result;
       }),
   };

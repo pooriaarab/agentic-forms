@@ -5,3 +5,7 @@ coverage/
 .env
 .env.local
 .DS_Store
+e2e-report.json
+.dev.vars
+.wrangler/
+agentic-forms.json

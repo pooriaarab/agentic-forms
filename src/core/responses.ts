@@ -37,6 +37,12 @@ export function toCsv(rows: Cell[][]): string {
   return rows.map((row) => `${row.map(cell).join(",")}\n`).join("");
 }
 
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+
+/** True only for a valid ISO time at or after now. Any other value fails closed. */
+const stillRetained = (retainUntil: unknown, now: number): boolean =>
+  typeof retainUntil === "string" && ISO_TIME.test(retainUntil) && Date.parse(retainUntil) >= now;
+
 export function createResponses(store: Store, repo: FormRepo) {
   const list = async (formId: string, options: { limit?: number; cursor?: string } = {}) =>
     (await store.query(COLLECTION, {
@@ -74,14 +80,14 @@ export function createResponses(store: Store, repo: FormRepo) {
       await store.put(COLLECTION, response.id, response as unknown as Doc);
       return response;
     },
-    /** Deletes responses past their retention date. Returns the count. Rows with no date stay. */
+    /** Deletes responses past their retention date. Returns the count. Rows with no date stay. A date that is not a valid time counts as expired. */
     async purgeExpired(formId: string, now: number = Date.now()): Promise<number> {
       let purged = 0;
       let cursor: string | undefined;
       do {
         const page = await list(formId, { cursor });
         for (const { id, data } of page.items) {
-          if (data.retainUntil !== undefined && Date.parse(data.retainUntil) < now) {
+          if (data.retainUntil !== undefined && !stillRetained(data.retainUntil, now)) {
             await store.delete(COLLECTION, id);
             purged++;
           }
@@ -103,7 +109,8 @@ export function createResponses(store: Store, repo: FormRepo) {
       const versions = [...new Set(rows.map((r) => r.formVersion))].sort((a, b) => b - a);
       const columns: string[] = [];
       for (const version of versions) {
-        const form = (await repo.getVersion(formId, version)) as Form;
+        const form = await repo.getVersion(formId, version);
+        if (!form) throw new Error(`snapshot "${formId}@${version}" is missing`);
         for (const section of form.sections) {
           for (const question of section.questions) if (!columns.includes(question.id)) columns.push(question.id);
         }

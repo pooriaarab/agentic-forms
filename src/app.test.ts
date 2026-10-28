@@ -160,6 +160,27 @@ describe("retention", () => {
     expect((await responses.list("f")).items.map((r) => r.data.values.name)).toContain("forever");
   });
 
+  test("a row with a retain date that is not a date is purged, not kept", async () => {
+    await publish(base({ retentionDays: 30 }));
+    const day = 86_400_000;
+    const keep = await responses.submit("f", { name: "keep" }, { now: () => 0 });
+    for (const [id, retainUntil] of [["garbage", "garbage"], ["nothing", null], ["number", 5], ["object", {}], ["empty", ""]] as const) {
+      await store.put("responses", id, { ...keep, id, retainUntil } as never);
+    }
+    expect(await responses.purgeExpired("f", day)).toBe(5);
+    expect((await responses.list("f")).items.map((r) => r.id)).toEqual([keep.id]);
+  });
+
+  test("a form with a required file question cannot be published", async () => {
+    const withFile = base({ sections: [{ id: "s", title: "S", questions: [{ id: "doc", type: "file", label: "Doc", required: true }] }] });
+    await repo.save(withFile);
+    await expect(repo.publish("f")).rejects.toThrow("file");
+    expect(await repo.getPublished("f")).toBeNull();
+    const optional = base({ sections: [{ id: "s", title: "S", questions: [{ id: "doc", type: "file", label: "Doc", required: false }] }] });
+    await repo.save(optional);
+    await expect(repo.publish("f")).resolves.toMatchObject({ status: "published" });
+  });
+
   test("a retention of zero or a fraction is an unsound form", async () => {
     await expect(repo.save(base({ retentionDays: 0 }))).rejects.toThrow("retention");
     await expect(repo.save(base({ retentionDays: 1.5 }))).rejects.toThrow("retention");

@@ -85,7 +85,8 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. With no token 
 - You must call `purgeExpired` yourself. Nothing schedules it yet.
 - No sharing, roles, or sign-in yet. The API uses one shared token.
 - The page test runs the page script in jsdom, not in a real browser.
-- A pattern rule runs as a JavaScript regular expression. Keep patterns simple.
+- A pattern rule uses RE2 syntax and runs in linear time. Backreferences and lookaround are refused. A pattern has up to 256 characters, and a text with a pattern rule has up to 1000.
+- `exportCsv` holds every response in memory. Use it for forms with up to a few thousand responses.
 
 ## Develop
 

@@ -1,6 +1,6 @@
 export { VERSION } from "./version.js";
 export * from "./core/form.js";
-export { FormError, createFormRepo } from "./core/repo.js";
+export { FormError, SnapshotExistsError, VersionConflictError, createFormRepo } from "./core/repo.js";
 export type { FormRepo } from "./core/repo.js";
 export { SubmitError, createResponses, toCsv } from "./core/responses.js";
 export type { Response } from "./core/responses.js";

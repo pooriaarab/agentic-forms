@@ -8,9 +8,10 @@ A form holds sections. A section holds questions. A condition shows a
 question or a section when an earlier answer matches. A save checks the
 form logic. A submit checks the answers against the newest published version.
 
-## The three faces
+## The faces
 
 - SDK: `import { createOps, createFileStore } from "agentic-forms"`.
+- Remote SDK: `import { createClient } from "agentic-forms/client"` calls the Worker HTTP API. A refused call throws `ApiError` with `status` and `code`.
 - CLI: `npx agentic-forms --help`.
 - MCP: `npx agentic-forms mcp`, then call a tool below.
 - HTTP: `/api/v1/forms` on the Worker, with a bearer token. Roles per form: owner, editor, viewer. Share with `POST /api/v1/forms/<id>/shares` (`{subject, kind, role}`, kind is `human` or `agent`: a person and an agent with the same id hold separate roles). Revoke with `DELETE /api/v1/forms/<id>/shares/<subject>?kind=human|agent`. `DELETE /api/v1/forms/<id>` erases a form, its answers, and its grants. `POST /f/<id>` is the public submit.

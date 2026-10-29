@@ -55,6 +55,36 @@ The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: 
 In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. The Worker uses one shared token, which acts as one principal that owns every form it makes.
 Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs at least 32 bytes. With a shorter token the Worker refuses to serve. The token is a bootstrap. The Worker also accepts credentials kept in the store, and they survive a restart. Make one in code: write a principal with `store.put("principals", id, { id, kind: "human", scopes: ["*:admin"] })`, then call `issueCredential(store, { principalId: id, kind: "api_key" })` from agentic-identity. It returns the bearer token once. Only the bearer header counts, not a cookie. With no token set, the Worker logs a warning. With no token and no stored credential, every call answers 401.
 
+## SDK
+
+`agentic-forms/client` calls the Worker over HTTP. It uses only `fetch`, so it runs in browsers, Workers, and Node 22.
+
+```ts
+import { createClient, ApiError } from "agentic-forms/client";
+
+const forms = createClient({ baseUrl: "https://forms.example.com", token: process.env.FORMS_TOKEN! });
+await forms.createForm({ id: "poll", title: "Poll", publish: true, sections: [{ id: "s", title: "S", questions: [{ id: "color", type: "single_choice", label: "Color", choices: ["red", "blue"] }] }] });
+await forms.submit("poll", { color: "red" });
+const { items } = await forms.listResponses("poll");
+try {
+  await forms.getForm("missing");
+} catch (error) {
+  if (error instanceof ApiError) console.log(error.status, error.code); // 404 "not_found"
+}
+```
+
+There is one method per API route: `health`, `listForms`, `createForm`, `getForm`, `addQuestion`, `publishForm`, `listResponses`, `exportCsv`, `purge`, `eraseForm`, `share`, `revokeShare`, `listAudit`, `purgeAll`, `migrateGrants`, `backfillOwners`, and the public `submit` (it sends no token). `GET /f/<id>` is a page for people, so it has no method.
+
+- A refused call throws `ApiError` with `status` (HTTP status), `code` (the API `error` field), `message`, `retryAfter` (seconds, on a 429), and `issues` when the API lists faults.
+- Every method takes `{ signal }` last, to cancel the call with an `AbortSignal`. A cancel rejects with the reason of the signal (an `AbortError` by default).
+- The client never retries. A retry of `createForm`, `submit`, or `purge` could repeat the write, so the caller decides.
+- `token` is optional. Without it, only `health` and `submit` work, so a browser page can submit with no secret. Any other call rejects with a `TypeError` before it sends.
+- In a browser, the page must have the same origin as the Worker. The Worker sends no CORS headers.
+- An id of `.` or `..` rejects with a `TypeError`, so it can never change the route.
+- `baseUrl` must be an absolute URL with no query, fragment, or user info. `createClient` throws a `TypeError` at once if it is not.
+- A 2xx reply that is not JSON rejects with `ApiError` (`code` is `bad_response`).
+- Pass `fetch` to `createClient` to use a proxy or a test double. For a service binding, pass `(input, init) => env.FORMS.fetch(input, init)`.
+
 ## Features
 
 - Ten question types: short text, long text, number, email, single choice,

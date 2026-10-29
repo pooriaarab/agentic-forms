@@ -27,7 +27,7 @@ afterAll(() => client.close());
 describe("mcp over stdio", () => {
   test("lists the tools", async () => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["add_question", "export_csv", "get_form", "list_responses", "new_form", "publish_form", "purge_all", "purge_expired", "submit_response", "update_form"]);
+    expect(names).toEqual(["add_question", "export_csv", "get_form", "list_forms", "list_responses", "new_form", "publish_form", "purge_all", "purge_expired", "submit_response", "update_form"]);
   });
 
   test("a logic cycle, a duplicate id, a bad type, and a missing form are tool errors, not crashes", async () => {
@@ -61,5 +61,12 @@ describe("mcp over stdio", () => {
     expect(rows.items).toHaveLength(1);
     expect(rows.items[0]).toMatchObject({ values: { name: "Ada", mood: 4 }, consent: true });
     expect((await call("export_csv", { form: "survey" })).text.split("\n")[0]).toBe("response_id,submitted_at,form_version,mood,name");
+    const listed = JSON.parse((await call("list_forms", {})).text).forms as { id: string }[];
+    expect(listed.map((f) => f.id)).toContain("survey");
+  });
+
+  test("an export with no answers still has the question columns", async () => {
+    await call("new_form", { ...spec("empty", [{ id: "q1", type: "short_text", label: "Q1" }]), publish: true });
+    expect((await call("export_csv", { form: "empty" })).text.trim()).toBe("response_id,submitted_at,form_version,q1");
   });
 });

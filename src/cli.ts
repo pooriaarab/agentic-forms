@@ -23,6 +23,7 @@ Commands:
   from-prompt --spec <file|-> [--publish]                      Make a form from a JSON spec.
   update <id> --spec <file|->                                  Replace title, notice, and sections from JSON.
   publish <id> [--expected-revision n]                         Open the form to answers.
+  list                                                         Print every form in the data file as JSON.
   show <id>                                                    Print the form as JSON.
   submit <id> --answers <json> [--consent]                     Store one response.
   responses <id> [--limit n] [--cursor c]                      Print responses as JSON.
@@ -125,6 +126,9 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       }
       case "publish":
         out(JSON.stringify(await ops.publish(need(), { expectedRevision: num(flags, "expected-revision") })));
+        return 0;
+      case "list":
+        out(JSON.stringify(await ops.list()));
         return 0;
       case "show":
         out(JSON.stringify(await ops.get(need())));

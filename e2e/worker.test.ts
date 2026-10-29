@@ -8,6 +8,7 @@ import { JSDOM } from "jsdom";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 const TOKEN = "e2e-token-0123456789-0123456789-abcdef"; // 40 bytes
+const RATE_SECRET = "e2e-rate-secret-0123456789-0123456789"; // 38 bytes
 const PORT = 8799;
 const base = `http://127.0.0.1:${PORT}`;
 const auth = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
@@ -16,7 +17,7 @@ const running: ChildProcess[] = [];
 // Starts `wrangler dev` and waits until it answers any request. A Worker that
 // refuses to start answers 500, so readiness is "any HTTP status".
 async function start(port: number, token?: string, options: { persist?: string; vars?: string[]; scheduled?: boolean } = {}): Promise<ChildProcess> {
-  const vars = [...(token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`]), ...(options.vars ?? []).flatMap((v) => ["--var", v])];
+  const vars = [...(options.vars?.some((v) => v.startsWith("FORMS_RATE_SECRET:")) ? [] : ["--var", `FORMS_RATE_SECRET:${RATE_SECRET}`]), ...(token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`]), ...(options.vars ?? []).flatMap((v) => ["--var", v])];
   const proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(port), ...(options.scheduled ? ["--test-scheduled"] : []), "--persist-to", options.persist ?? mkdtempSync(join(tmpdir(), "forms-d1-")), ...vars], {
     env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
   });
@@ -104,6 +105,16 @@ describe("durable storage", () => {
     await start(8804, TOKEN, { persist });
     const rows = await (await fetch("http://127.0.0.1:8804/api/v1/forms/keep/responses", { headers })).json();
     expect(rows.items.map((r: { values: { n: string } }) => r.values.n)).toEqual(["kept"]);
+  });
+
+  test("a missing or short rate limit secret stops requests, and the purge job still runs", async () => {
+    const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
+    for (const [i, secret] of ["", "short"].entries()) {
+      const port = 8820 + i;
+      await start(port, TOKEN, { persist, scheduled: true, vars: [`FORMS_RATE_SECRET:${secret}`] });
+      expect((await fetch(`http://127.0.0.1:${port}/health`)).status, `secret "${secret}"`).toBe(500);
+      expect((await fetch(`http://127.0.0.1:${port}/__scheduled?cron=17+*+*+*+*`)).status).toBe(200);
+    }
   });
 
   test("a region that is not eu or us makes the Worker refuse to serve", async () => {

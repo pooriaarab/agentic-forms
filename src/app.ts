@@ -17,6 +17,8 @@ export interface AppOptions {
   apiToken?: string;
   /** Submits allowed per client in each window. Defaults to 20 a minute. Pass `false` to turn it off. The counters live in the store. */
   rateLimit?: { limit: number; windowMs: number } | false;
+  /** Keys the hash of each client address in the stored counters. At least 32 bytes. createApp throws without it, unless `rateLimit` is false. There is no default. */
+  rateLimitSecret?: string;
   /** Off by default. Return false to refuse a submit. Plug a check here that runs on your own host. */
   botCheck?: (request: Request, body: Record<string, unknown>) => boolean | Promise<boolean>;
   now?: () => number;
@@ -37,7 +39,8 @@ export function createApp(options: AppOptions = {}) {
   const ops = createOps(store);
   const { repo, responses } = ops;
   const now = options.now ?? Date.now;
-  const limiter = options.rateLimit === false ? undefined : createRateLimiter(store, options.rateLimit ?? { limit: 20, windowMs: 60_000 }, now);
+  const limiter =
+    options.rateLimit === false ? undefined : createRateLimiter(store, options.rateLimit ?? { limit: 20, windowMs: 60_000 }, options.rateLimitSecret as string, now);
 
   const app = new Hono();
   app.get("/health", (c) => c.json({ ok: true, version: VERSION }));

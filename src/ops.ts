@@ -3,7 +3,7 @@ import { formSpecSchema, questionSchema } from "./core/schema.js";
 import type { Answers, Form } from "./core/form.js";
 import { createFormRepo } from "./core/repo.js";
 import { purgeRateLimits } from "./core/rate-limit.js";
-import { createResponses } from "./core/responses.js";
+import { createResponses, purgeExpiredResponses } from "./core/responses.js";
 import type { Store } from "agentic-identity";
 
 export class OpsError extends Error {
@@ -56,11 +56,17 @@ export function createOps(store: Store) {
       await get(formId);
       return responses.exportCsv(formId);
     },
-    /** Hard-deletes every form's responses past retention and every finished rate-limit counter. The scheduled job runs this. */
+    /**
+     * Hard-deletes responses past retention in every form, and finished rate-limit
+     * counters. The scheduled job runs this. Each part runs even when the other
+     * fails, and the failure is then thrown.
+     */
     async purgeAll(now: number = Date.now()) {
-      let purged = 0;
-      for (const form of await repo.list()) purged += await responses.purgeExpired(form.id, now);
-      return { purged, rateLimits: await purgeRateLimits(store, now) };
+      const [purged, rateLimits] = await Promise.allSettled([purgeExpiredResponses(store, now), purgeRateLimits(store, now)]);
+      if (purged.status === "rejected" || rateLimits.status === "rejected") {
+        throw new AggregateError([purged, rateLimits].flatMap((r) => (r.status === "rejected" ? [r.reason] : [])), "the purge failed");
+      }
+      return { purged: purged.value, rateLimits: rateLimits.value };
     },
     async purge(formId: string) {
       await get(formId);

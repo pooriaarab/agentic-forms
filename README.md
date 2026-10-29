@@ -58,11 +58,11 @@ The Worker accepts one kind of credential: a credential kept in the store, made 
 
 ### Migrate off FORMS_API_TOKEN
 
-Before the next release, the Worker also accepted one shared token in `FORMS_API_TOKEN`. That path is gone. The Worker ignores the variable and logs a warning when it is set. Callers that sent the shared token now get 401. To migrate:
+Before this change, the Worker also accepted one shared token in `FORMS_API_TOKEN`. That path is gone. The Worker ignores the variable and logs a warning when it is set. Callers that sent the shared token now get 401. To migrate:
 
-1. Make a principal and a credential in the store, as above. The shared token acted as an agent with all rights (`kind: "agent"`, scope `*:admin`). Use the same kind if you want the same agent mark on new questions.
-2. Give each caller its own credential. Share forms with `POST /api/v1/forms/<id>/shares`.
-3. Forms the shared token made belong to the principal `deployment` (kind `agent`). Give them to a real owner with `backfillOwners`, or share them.
+1. Do these steps before you deploy the new Worker, or the deployment is locked out. Make the principal `deployment` with kind `agent` and scope `*:admin` in the store, and issue a credential for it, as above. The shared token signed callers in as this principal, and it owns every form the token made. The id and the kind both matter.
+2. With that credential, share each old form with its real owner: `POST /api/v1/forms/<id>/shares` with role `owner`. `backfillOwners` does not help here: it skips a form that already has an owner.
+3. Give each other caller its own credential.
 4. Run `wrangler secret delete FORMS_API_TOKEN`.
 
 ## Live demo

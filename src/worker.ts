@@ -13,7 +13,7 @@ export interface WorkerEnv {
   FORMS_UNSAFE_LOCAL_REGION?: string;
   /** Set it as a secret: wrangler secret put FORMS_RATE_SECRET. At least 32 bytes. It keys the hash of client addresses. */
   FORMS_RATE_SECRET?: string;
-  /** Not used. It was a shared token before 0.6.0. The Worker ignores it and logs a warning. See "Migrate off FORMS_API_TOKEN" in the README. */
+  /** Not used. It was a shared token before this change. The Worker ignores it and logs a warning. See "Migrate off FORMS_API_TOKEN" in the README. */
   FORMS_API_TOKEN?: string;
 }
 
@@ -43,7 +43,7 @@ const forget = <T>(work: Promise<T>, reset: () => void) =>
   });
 
 const database = (env: WorkerEnv) => (storing ??= forget(openStore(env), () => (storing = undefined)));
-// The app is separate, so a bad API token or rate secret stops requests and not the purge job.
+// The app is separate, so a bad rate secret stops requests and not the purge job.
 const app = (env: WorkerEnv) =>
   (serving ??= forget(
     database(env).then(({ store }) => createApp({ store, auth: durableAuth(store, env), rateLimitSecret: env.FORMS_RATE_SECRET, ui: true })),

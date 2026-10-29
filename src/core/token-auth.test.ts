@@ -33,3 +33,10 @@ describe("bearerOnly", () => {
     expect(seen).toBeNull();
   });
 });
+
+describe("createTokenAuth", () => {
+  test("a token with a character the Bearer header check refuses is refused at start", () => {
+    expect(() => createTokenAuth("a+b/".repeat(10) + "==")).toThrow("API token");
+    expect(() => createTokenAuth("a-b_".repeat(10))).not.toThrow();
+  });
+});

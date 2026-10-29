@@ -4,6 +4,7 @@ import { SubmitError } from "./core/responses.js";
 import { FormError, VersionConflictError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
 import { EraseRefusedError, MAX_AUDIT_PAGE, MAX_OWNERS_ON_ERASE, ROLES, SUBJECT_KINDS, createMemoryStore, createSharing, hasScope, isMachineMade, migrateGrants, type Action, type Auth, type PrincipalContext, type Role, type Store, type SubjectKind } from "agentic-identity";
+import { requirePrincipal } from "agentic-identity/http";
 import { clientKey, createRateLimiter } from "./core/rate-limit.js";
 import { BackfillError } from "./core/backfill.js";
 import { FORM_ID, SUBJECT_ID, wellFormedCursor } from "./core/schema.js";
@@ -104,8 +105,9 @@ export function createApp(options: AppOptions = {}) {
 
   app.use("/api/v1/*", async (c, next) => {
     if (!options.auth) return c.json({ error: "api_disabled" }, 503);
-    const ctx = await options.auth.authenticate(c.req.raw);
-    if (!ctx || ctx.chain.length === 0) return c.json({ error: "unauthorized" }, 401);
+    const ctx = await requirePrincipal(c.req.raw, options.auth);
+    if (ctx instanceof Response) return ctx;
+    if (ctx.chain.length === 0) return c.json({ error: "unauthorized" }, 401);
     c.set("ctx", ctx);
     await next();
   });

@@ -1,8 +1,10 @@
 import type { Auth } from "agentic-identity";
 
 const MIN_TOKEN_BYTES = 32;
-/** A longer token would not fit the header pattern below, and every call would fail without a hint. */
+/** Longer than the Bearer pattern of agentic-identity/http allows, so every call would fail without a hint. */
 const MAX_TOKEN_BYTES = 512;
+/** The characters agentic-identity/http accepts in a Bearer token. Another one would lock every caller out. */
+const TOKEN_CHARS = /^[A-Za-z0-9_-]+$/;
 
 /** Compares two secrets in constant time by comparing their digests. */
 async function sameSecret(a: string, b: string): Promise<boolean> {
@@ -19,8 +21,8 @@ async function sameSecret(a: string, b: string): Promise<boolean> {
  */
 export function createTokenAuth(token: string): Auth {
   const bytes = typeof token === "string" ? new TextEncoder().encode(token).length : 0;
-  if (bytes < MIN_TOKEN_BYTES || bytes > MAX_TOKEN_BYTES) {
-    throw new Error(`the API token must be a string of ${MIN_TOKEN_BYTES} to ${MAX_TOKEN_BYTES} bytes`);
+  if (bytes < MIN_TOKEN_BYTES || bytes > MAX_TOKEN_BYTES || !TOKEN_CHARS.test(token)) {
+    throw new Error(`the API token must be ${MIN_TOKEN_BYTES} to ${MAX_TOKEN_BYTES} bytes of letters, digits, "_" and "-"`);
   }
   return {
     async authenticate(request) {

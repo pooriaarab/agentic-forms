@@ -1,7 +1,7 @@
 // The operations every face shares: SDK, CLI, MCP, and HTTP API call these.
-import { formSpecSchema, questionSchema } from "./core/schema.js";
-import type { Answers, Form } from "./core/form.js";
-import { createFormRepo } from "./core/repo.js";
+import { formSpecSchema, questionSchema, type FormSpec } from "./core/schema.js";
+import { validateForm, type Answers, type Form } from "./core/form.js";
+import { FormError, createFormRepo } from "./core/repo.js";
 import { purgeRateLimits } from "./core/rate-limit.js";
 import { createResponses, purgeExpiredResponses } from "./core/responses.js";
 import type { Store } from "agentic-identity";
@@ -21,13 +21,21 @@ export function createOps(store: Store) {
     if (!form) throw new OpsError("not_found", `form "${id}" not found`);
     return form;
   };
+  /** Checks a JSON spec without storing it. Throws ZodError or FormError. */
+  const check = (spec: unknown): FormSpec => {
+    const parsed = formSpecSchema.parse(spec);
+    const issues = validateForm({ ...parsed, version: 1, status: "draft" });
+    if (issues.length > 0) throw new FormError(issues);
+    return parsed;
+  };
   return {
     repo,
     responses,
     get,
+    check,
     /** Makes a form from a JSON spec. Throws ZodError, FormError, or OpsError. */
     async create(spec: unknown, publish = false): Promise<Form> {
-      const parsed = formSpecSchema.parse(spec);
+      const parsed = check(spec);
       if (await repo.get(parsed.id)) throw new OpsError("conflict", `form "${parsed.id}" already exists`);
       const draft = await repo.save({ ...parsed, version: 1, status: "draft" });
       return publish ? repo.publish(draft.id) : draft;

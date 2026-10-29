@@ -107,6 +107,26 @@ describe("durable storage", () => {
     expect(rows.items.map((r: { values: { n: string } }) => r.values.n)).toEqual(["kept"]);
   });
 
+  test("the rate limit counter and the owner rows survive a Worker restart", async () => {
+    const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
+    const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
+    const first = await start(8806, TOKEN, { persist });
+    const open = { id: "limit", title: "Limit", publish: true, sections: [{ id: "s", title: "S", questions: [{ id: "n", type: "short_text", label: "N", required: true }] }] };
+    expect((await fetch("http://127.0.0.1:8806/api/v1/forms", { method: "POST", headers, body: JSON.stringify(open) })).status).toBe(201);
+    const send = (port: number) =>
+      fetch(`http://127.0.0.1:${port}/f/limit`, { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "198.51.100.7" }, body: JSON.stringify({ answers: { n: "x" } }) });
+    for (let i = 0; i < 20; i++) expect((await send(8806)).status, `hit ${i + 1}`).toBe(201); // no credential: the page is anonymous
+    expect((await send(8806)).status).toBe(429);
+    await stop(first);
+
+    await start(8807, TOKEN, { persist });
+    expect((await send(8807)).status).toBe(429); // the counter was kept in D1
+    const audit = await fetch("http://127.0.0.1:8807/api/v1/forms/limit/audit", { headers });
+    expect(audit.status).toBe(200);
+    expect((await fetch("http://127.0.0.1:8807/api/v1/forms/limit/shares", { method: "POST", headers, body: JSON.stringify({ subject: "vic", role: "viewer" }) })).status).toBe(200);
+    expect((await fetch("http://127.0.0.1:8807/api/v1/forms/limit", { headers: { authorization: "Bearer wrong" } })).status).toBe(401);
+  });
+
   test("a missing or short rate limit secret stops requests, and the purge job still runs", async () => {
     const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
     for (const [i, secret] of ["", "short"].entries()) {

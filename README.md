@@ -50,6 +50,7 @@ The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` c
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.
 
 The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: Bearer <token>`).
+In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. The Worker uses one shared token, which acts as one principal that owns every form it makes.
 Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs at least 32 bytes. With a shorter token the Worker refuses to serve. With no token the API answers 503.
 
 ## Features
@@ -68,6 +69,7 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
   draft. Old responses stay readable against their own version.
 - `exportCsv` writes every response as CSV. It makes formula cells inert.
 - Agent tools: nine MCP tools and one CLI command each for make, extend, publish, submit, list, export, and purge.
+- Access: every `/api/v1` route names the caller, and `can()` of `agentic-identity` decides it. The creator owns the form. Roles are owner, editor, and viewer. A viewer reads the form. An editor also edits, publishes, and reads answers. Only an owner shares, purges, and reads the audit log. A delegated agent keeps only the scopes it got. Each check is audited.
 - Storage runs on the `Store` port of `agentic-identity`. The Worker uses D1, the
   CLI uses a locked JSON file, and tests use the memory adapter.
 
@@ -76,7 +78,7 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 - Built for WCAG 2.2 AA: labels, visible focus, 44px targets, a text error summary.
 - A rate limit per client, kept in the store so every isolate shares it, and a bot-check hook that is off by default.
 - GDPR: a privacy notice with a required consent box, and a retention period.
-  The hourly job and `purgeExpired` hard-delete responses past their date. Reads hide them before the job runs.
+  The scheduled job and `purgeExpired` hard-delete responses past their date. Reads hide them before the job runs.
 
 ## Limits
 
@@ -87,7 +89,10 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 - The fill page needs JavaScript and does not show file questions.
 - The Worker deletes expired responses every 10 minutes (a Cron Trigger). The CLI does not schedule: run `purge-all` yourself. Each run reads a bounded number of pages per pass, so a big backlog clears over several runs. A run can need more D1 calls than the Workers Free plan allows. The ordered read has no index: a very large `responses` collection makes each page read slow.
 - Set two Worker secrets: `wrangler secret put FORMS_RATE_SECRET` (32 bytes or more, it keys the hash of client addresses) and `FORMS_API_TOKEN`. Without the rate secret the Worker refuses requests. A client with no address header shares one counter. An IPv6 client counts by its /64. An attacker with many addresses can still make many counters: put the platform's rate limiting in front for that.
-- No sharing, roles, or sign-in yet. The API uses one shared token.
+- The Worker tells callers apart only if you give `createApp` a real `Auth` adapter. With the shared token, every caller is one owner.
+- Reading answers needs the editor role, so the audit log records it as a `write` check.
+- The CLI and the MCP server act on a local file and skip roles. Whoever can open the file owns it.
+- A form made before roles existed has no owner and is closed to the API.
 - The page test runs the page script in jsdom, not in a real browser.
 - A pattern rule uses RE2 syntax and runs in linear time. Backreferences and lookaround are refused. A pattern has up to 256 characters, and a text with a pattern rule has up to 1000.
 - `exportCsv` holds every response in memory. Use it for forms with up to a few thousand responses.

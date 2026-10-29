@@ -1,6 +1,7 @@
 import { createD1Store, D1_SCHEMA, type D1Like } from "agentic-identity/cloudflare";
 import { parseRegion, type Store } from "agentic-identity";
 import { createApp } from "./app.js";
+import { createTokenAuth } from "./core/token-auth.js";
 import { createOps } from "./ops.js";
 
 export interface WorkerEnv {
@@ -36,7 +37,7 @@ const database = (env: WorkerEnv) => (storing ??= forget(openStore(env), () => (
 // The app is separate, so a bad API token or rate secret stops requests and not the purge job.
 const app = (env: WorkerEnv) =>
   (serving ??= forget(
-    database(env).then(({ store }) => createApp({ store, apiToken: env.FORMS_API_TOKEN, rateLimitSecret: env.FORMS_RATE_SECRET })),
+    database(env).then(({ store }) => createApp({ store, auth: env.FORMS_API_TOKEN === undefined ? undefined : createTokenAuth(env.FORMS_API_TOKEN), rateLimitSecret: env.FORMS_RATE_SECRET })),
     () => (serving = undefined),
   ));
 

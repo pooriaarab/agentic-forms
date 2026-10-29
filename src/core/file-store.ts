@@ -70,10 +70,25 @@ export function createFileStore(path: string, options: FileStoreOptions = {}): S
   const lockPath = `${path}.lock`;
   const token = `${process.pid}:${randomBytes(8).toString("hex")}`;
 
+  /** Reads the file and checks its shape. A version that is not a whole number up to the clock would hide a lost update. */
   const load = (): Data => {
     if (!existsSync(path)) return { clock: 0, tables: new Map() };
-    const raw = JSON.parse(readFileSync(path, "utf8")) as { clock: number; tables: Record<string, Record<string, Row>> };
-    return { clock: raw.clock, tables: new Map(Object.entries(raw.tables).map(([name, rows]) => [name, new Map(Object.entries(rows))])) };
+    const bad = () => new Error(`"${path}" is not an agentic-forms data file`);
+    const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+    const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (!isObject(raw) || !Number.isSafeInteger(raw.clock) || !isObject(raw.tables)) throw bad();
+    const clock = raw.clock as number;
+    const tables: Tables = new Map();
+    for (const [name, rows] of Object.entries(raw.tables)) {
+      if (!isObject(rows)) throw bad();
+      const table = new Map<string, Row>();
+      for (const [id, row] of Object.entries(rows)) {
+        if (!isObject(row) || !Number.isSafeInteger(row.v) || (row.v as number) < 1 || (row.v as number) > clock || !isObject(row.doc)) throw bad();
+        table.set(id, { v: row.v as number, doc: row.doc as Doc });
+      }
+      tables.set(name, table);
+    }
+    return { clock, tables };
   };
   const save = (data: Data) => {
     const temp = `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;

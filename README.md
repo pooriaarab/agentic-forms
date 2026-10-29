@@ -82,7 +82,8 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 
 - The Worker needs a D1 database. Create it in the EU: `wrangler d1 create agentic-forms --location weur`.
   Put its id in `wrangler.jsonc` and keep `FORMS_REGION` at `eu`. The region is your claim, and D1 refuses a query that another region served.
-- The CLI and MCP server keep data in one JSON file. It is safe for several processes, and it is not a database.
+- The CLI and MCP server keep data in one JSON file. It is safe for several processes, and it is not a database. Each read loads the whole file, so keep it to small data sets. A file in an older format fails with a clear error.
+- Import `createMemoryStore` and the `Store` types from `agentic-identity`. This package does not re-export them.
 - The fill page needs JavaScript and does not show file questions.
 - The rate limit lives in one isolate's memory.
 - You must call `purgeExpired` yourself. Nothing schedules it yet.

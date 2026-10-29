@@ -1,7 +1,7 @@
 import { createD1Store, D1_SCHEMA, type D1Like } from "agentic-identity/cloudflare";
 import { createStoreAuth, parseRegion, type Store } from "agentic-identity";
 import { createApp } from "./app.js";
-import { bearerOnly, createTokenAuth, firstAuth } from "./core/token-auth.js";
+import { bearerOnly } from "./core/bearer-only.js";
 import { createOps } from "./ops.js";
 
 export interface WorkerEnv {
@@ -13,7 +13,7 @@ export interface WorkerEnv {
   FORMS_UNSAFE_LOCAL_REGION?: string;
   /** Set it as a secret: wrangler secret put FORMS_RATE_SECRET. At least 32 bytes. It keys the hash of client addresses. */
   FORMS_RATE_SECRET?: string;
-  /** Set it as a secret: wrangler secret put FORMS_API_TOKEN. Optional: a shared token that acts as the deployment. Store credentials work without it. */
+  /** Not used. It was a shared token before 0.6.0. The Worker ignores it and logs a warning. See "Migrate off FORMS_API_TOKEN" in the README. */
   FORMS_API_TOKEN?: string;
 }
 
@@ -30,10 +30,10 @@ async function openStore(env: WorkerEnv) {
   return { store, ops: createOps(store) };
 }
 
-// Credentials live in the store, so they survive a restart. The shared token, when set, still works as the bootstrap.
+// Credentials live in the store (agentic-identity), so they survive a restart. There is no other way in.
 const durableAuth = (store: Store, env: WorkerEnv) => {
-  if (env.FORMS_API_TOKEN === undefined) console.warn("FORMS_API_TOKEN is not set: only credentials kept in the store can call /api/v1.");
-  return env.FORMS_API_TOKEN === undefined ? bearerOnly(createStoreAuth(store)) : firstAuth(createTokenAuth(env.FORMS_API_TOKEN), bearerOnly(createStoreAuth(store)));
+  if (env.FORMS_API_TOKEN !== undefined) console.warn("FORMS_API_TOKEN is ignored. Only credentials kept in the store can call /api/v1. See the README.");
+  return bearerOnly(createStoreAuth(store));
 };
 
 const forget = <T>(work: Promise<T>, reset: () => void) =>

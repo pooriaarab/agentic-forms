@@ -8,8 +8,7 @@ import { createApp } from "./app.js";
 import type { Form } from "./core/form.js";
 import { createFormRepo } from "./core/repo.js";
 import { createResponses } from "./core/responses.js";
-import { createMemoryStore } from "agentic-identity";
-import { createTokenAuth } from "./core/token-auth.js";
+import { createMemoryAuth, createMemoryStore } from "agentic-identity";
 
 const evil = `<img src=x onerror=alert(1)>"`;
 const base = (extra: Partial<Form> = {}): Form => ({
@@ -154,10 +153,12 @@ describe("submit", () => {
   test("the purge route needs the token and deletes expired rows in every form", async () => {
     await publish(base());
     await store.put("responses", "old", { id: "old", formId: "f", formVersion: 1, submittedAt: "2020-01-01T00:00:00.000Z", values: {}, retainUntil: "2020-02-01T00:00:00.000Z" });
-    const app = createApp({ rateLimitSecret: SECRET, store, auth: createTokenAuth("t".repeat(32)) });
+    const memory = createMemoryAuth();
+    const admin = await memory.issue({ principalId: "ada", kind: "human", chain: [{ id: "ada", kind: "human" }], scopes: ["*:admin"] });
+    const app = createApp({ rateLimitSecret: SECRET, store, auth: memory.auth });
     expect((await app.request("/api/v1/purge", { method: "POST" })).status).toBe(401);
     expect(await store.get("responses", "old")).not.toBeNull();
-    const run = await app.request("/api/v1/purge", { method: "POST", headers: { authorization: `Bearer ${"t".repeat(32)}` } });
+    const run = await app.request("/api/v1/purge", { method: "POST", headers: { authorization: `Bearer ${admin}` } });
     expect(await run.json()).toEqual({ purged: 1, rateLimits: 0 });
     expect(await store.get("responses", "old")).toBeNull();
   });

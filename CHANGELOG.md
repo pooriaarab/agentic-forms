@@ -2,6 +2,13 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## Unreleased
+
+Breaking for the Worker and the SDK: the shared `FORMS_API_TOKEN` is removed. Identity credentials are the only way in.
+
+- The Worker no longer checks `FORMS_API_TOKEN`. It ignores the variable, logs a warning when it is set, and answers 401 to a caller that sends the old token. Follow "Migrate off FORMS_API_TOKEN" in the README.
+- Remove `createTokenAuth` from the package exports. Pass an `Auth` adapter of `agentic-identity` to `createApp` instead.
+
 ## 0.5.0 - 2026-10-29
 
 No breaking changes. `agentic-design` moves from a dev dependency to a runtime dependency.

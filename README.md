@@ -53,8 +53,17 @@ The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` c
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.
 
 The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: Bearer <token>`).
-In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. The Worker uses one shared token, which acts as one principal that owns every form it makes.
-Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs 32 to 512 bytes of letters, digits, `_` and `-` (for example `openssl rand -hex 32`). With another token the Worker refuses to serve. The token is a bootstrap. The Worker also accepts credentials kept in the store, and they survive a restart. Make one in code: write a principal with `store.put("principals", id, { id, kind: "human", scopes: ["*:admin"] })`, then call `issueCredential(store, { principalId: id, kind: "api_key" })` from agentic-identity. It returns the bearer token once. Only the bearer header counts, not a cookie. With no token set, the Worker logs a warning. With no token and no stored credential, every call answers 401.
+In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`.
+The Worker accepts one kind of credential: a credential kept in the store, made with `issueCredential` from agentic-identity. It survives a restart. Write a principal with `store.put("principals", id, { id, kind: "human", scopes: ["*:admin"] })`, then call `issueCredential(store, { principalId: id, kind: "api_key" })`. It returns the bearer token once. Only the bearer header counts, not a cookie. A call with no credential or a wrong one answers 401. A valid credential without the right scope or role answers 403. If the store cannot be read, the call answers 503.
+
+### Migrate off FORMS_API_TOKEN
+
+Before the next release, the Worker also accepted one shared token in `FORMS_API_TOKEN`. That path is gone. The Worker ignores the variable and logs a warning when it is set. Callers that sent the shared token now get 401. To migrate:
+
+1. Make a principal and a credential in the store, as above. The shared token acted as an agent with all rights (`kind: "agent"`, scope `*:admin`). Use the same kind if you want the same agent mark on new questions.
+2. Give each caller its own credential. Share forms with `POST /api/v1/forms/<id>/shares`.
+3. Forms the shared token made belong to the principal `deployment` (kind `agent`). Give them to a real owner with `backfillOwners`, or share them.
+4. Run `wrangler secret delete FORMS_API_TOKEN`.
 
 ## Live demo
 
@@ -65,7 +74,6 @@ Deploy your own copy of the demo from a checkout. You do not need a CI secret.
 ```sh
 npx wrangler d1 create agentic-forms-demo --location weur   # once: put the id in wrangler.demo.jsonc
 npx wrangler secret put FORMS_RATE_SECRET -c wrangler.demo.jsonc   # 32 bytes or more
-npx wrangler secret put FORMS_API_TOKEN -c wrangler.demo.jsonc     # 32 bytes or more
 npm ci
 npm run deploy:demo
 ```
@@ -114,7 +122,7 @@ What you can do in it:
 - Preview the form. The preview shows and hides questions by their conditions and sends nothing.
 - Publish, and copy the share link `/f/<id>`. The link opens the public fill page, which uses the same tokens, in light and dark.
 - Read the responses in a table (100 per page) and export them as CSV.
-- See which questions an agent made or changed. The server sets that mark from the caller. Only a person (a principal of kind `human`) makes human-marked questions. Every other kind, such as an agent, a delegated agent, or a personal token used by an agent, is marked as an agent. The shared `FORMS_API_TOKEN` acts as an agent, so every question made through it shows the agent mark.
+- See which questions an agent made or changed. The server sets that mark from the caller. Only a person (a principal of kind `human`) makes human-marked questions. Every other kind, such as an agent, a delegated agent, or a personal token used by an agent, is marked as an agent. A credential of an agent principal shows the agent mark on every question it makes.
 
 Run it on your machine:
 
@@ -123,10 +131,18 @@ npm ci
 npm run build:ui
 WRANGLER_SEND_METRICS=false npx wrangler dev --local \
   --var FORMS_REGION:unknown --var FORMS_UNSAFE_LOCAL_REGION:1 \
-  --var FORMS_RATE_SECRET:$(openssl rand -hex 32) --var FORMS_API_TOKEN:$(openssl rand -hex 32)
+  --var FORMS_RATE_SECRET:$(openssl rand -hex 32)
 ```
 
-Open `http://127.0.0.1:8787/ui/` and sign in with the value you gave `FORMS_API_TOKEN`. Run the browser tests with `npm run test:ui`: Playwright starts `wrangler dev`, builds a form, fills it by its link, reads the response, reloads, and runs an axe WCAG 2.2 AA scan on every view in light and dark. Screenshots of each view in both schemes are in `docs/screenshots/`. They are rewritten on each run.
+Make a local credential once, with a token you keep (the store holds only its SHA-256):
+
+```sh
+TOKEN=$(openssl rand -hex 32); HASH=$(printf %s "$TOKEN" | sha256sum | cut -d' ' -f1)
+WRANGLER_SEND_METRICS=false npx wrangler d1 execute DB --local --command "CREATE TABLE IF NOT EXISTS store_docs (collection TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (collection, id)) WITHOUT ROWID; INSERT OR REPLACE INTO store_docs (collection, id, body, version) VALUES ('principals', 'me', '{\"id\":\"me\",\"kind\":\"human\",\"scopes\":[\"*:admin\"]}', 1), ('credentials', '$HASH', '{\"principalId\":\"me\",\"kind\":\"session\"}', 1)"
+echo "$TOKEN"
+```
+
+Open `http://127.0.0.1:8787/ui/` and sign in with that token. Run the browser tests with `npm run test:ui`: Playwright starts `wrangler dev`, builds a form, fills it by its link, reads the response, reloads, and runs an axe WCAG 2.2 AA scan on every view in light and dark. Screenshots of each view in both schemes are in `docs/screenshots/`. They are rewritten on each run.
 
 The Worker UI bundle is not in the npm package. The `agentic-forms/ui` export is. Deploy the Worker UI from a checkout with `npm run build:ui && wrangler deploy`. A file upload question shows in the builder, but the form page cannot take files yet. The UI makes no request to another site, and it loads its fonts from the Worker.
 
@@ -197,8 +213,8 @@ the token. The share link of a form points at `baseUrl`. The pages follow the ad
 
   Each HTTP or code call handles at most `limit` forms (25 if you do not give it), so it stays under the D1 call limit of one Worker request. Send the `nextCursor` back until it is absent. The `limit` is 25 at most. A page can still need more D1 calls than the Workers Free plan allows: use a smaller `limit` there. A form that already has a resource row is not touched, so a second run is safe. The owner is not checked against the people you know: a mistyped owner gets every old form, and a second run with the right owner changes nothing. Check the owner before the first run. A form whose id is held by another resource type is listed under `conflicts`. A form whose id sharing cannot hold (for example `my.form`) is listed under `invalid` and not changed: recreate it with a valid id. The route does not write an audit row, so keep the call to trusted admins.
 - The Worker deletes expired responses every 10 minutes (a Cron Trigger). The CLI does not schedule: run `purge-all` yourself. Each run reads a bounded number of pages per pass, so a big backlog clears over several runs. A run can need more D1 calls than the Workers Free plan allows. The ordered read has no index: a very large `responses` collection makes each page read slow.
-- Set two Worker secrets: `wrangler secret put FORMS_RATE_SECRET` (32 bytes or more, it keys the hash of client addresses) and `FORMS_API_TOKEN`. Without the rate secret the Worker refuses requests. A client with no address header shares one counter. An IPv6 client counts by its /64. An attacker with many addresses can still make many counters: put the platform's rate limiting in front for that.
-- The Worker tells callers apart only if you give `createApp` a real `Auth` adapter. With the shared token, every caller is one owner.
+- Set the Worker secret `wrangler secret put FORMS_RATE_SECRET` (32 bytes or more, it keys the hash of client addresses), and make a credential in the store. Without the rate secret the Worker refuses requests. A client with no address header shares one counter. An IPv6 client counts by its /64. An attacker with many addresses can still make many counters: put the platform's rate limiting in front for that.
+- The Worker tells callers apart by the credential kept in the store. One credential for many callers makes them one owner.
 - Reading answers needs the editor role, so the audit log records it as a `write` check.
 - The CLI and the MCP server act on a local file and skip roles. Whoever can open the file owns it.
 - A form made before roles existed has no owner and is closed to the API.

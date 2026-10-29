@@ -1,7 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { build } from "esbuild";
 import { mkdirSync, readFileSync } from "node:fs";
-import { TOKEN } from "../playwright.config.js";
+import { resolve } from "node:path";
+import { PORT, TOKEN } from "../playwright.config.js";
 
 const SHOTS = "docs/screenshots";
 const SCHEMES = ["light", "dark"] as const;
@@ -241,4 +243,42 @@ test("focus is visible on each stop of the sign-in page", async ({ page }) => {
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Sign in" })).toBeFocused();
   expect(await visible()).toBe(true);
+});
+
+// `agentic-forms/ui` is built into dist. A host page mounts it against the Worker with a token callback.
+test("the built ./ui export mounts in a host page, lists forms, and unmounts", async ({ page, request }) => {
+  const id = `embed-${Date.now().toString(36)}`;
+  const made = await request.post("/api/v1/forms", { headers: { authorization: `Bearer ${TOKEN}` }, data: { id, title: "Embedded form", sections: [{ id: "s", title: "S", questions: [] }] } });
+  expect(made.ok()).toBe(true);
+  // The harness imports the package output (dist/embed.js), the same file that the "./ui" export names.
+  const bundle = await build({
+    stdin: { contents: `import { mount } from ${JSON.stringify(resolve("dist/embed.js"))}; window.hostMount = mount;`, resolveDir: process.cwd(), loader: "js" },
+    bundle: true,
+    write: false,
+    format: "iife",
+    jsx: "automatic",
+    define: { "process.env.NODE_ENV": '"production"' },
+  });
+  const origin = `http://127.0.0.1:${PORT}`;
+  const host = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Host</title><link rel="stylesheet" href="/ui/styles.css"><link rel="stylesheet" href="/embed.css"></head><body><main id="forms"></main></body></html>`;
+  await page.route(`${origin}/host.html`, (route) => route.fulfill({ contentType: "text/html", body: host }));
+  await page.route(`${origin}/host.js`, (route) => route.fulfill({ contentType: "text/javascript", body: bundle.outputFiles[0]!.text }));
+  await page.route(`${origin}/embed.css`, (route) => route.fulfill({ contentType: "text/css", body: readFileSync("dist/embed.css", "utf8") }));
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/host.html");
+  await page.addScriptTag({ url: "/host.js" });
+  await page.evaluate((base) => {
+    (window as unknown as { handle: { unmount(): void } }).handle = (window as never as { hostMount: (el: HTMLElement, o: unknown) => { unmount(): void } }).hostMount(document.getElementById("forms")!, { baseUrl: base, getToken: () => (window as never as { tok: string }).tok });
+  }, origin);
+  // The callback has no token yet, so the first read fails with an alert. Give it the token and retry.
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.evaluate((t) => ((window as never as { tok: string }).tok = t), TOKEN);
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("link", { name: "Embedded form" })).toBeVisible();
+  const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
+  expect(result.violations.map((v) => v.id)).toEqual([]);
+  await page.evaluate(() => (window as never as { handle: { unmount(): void } }).handle.unmount());
+  await expect(page.locator("#forms")).toBeEmpty();
+  expect(errors).toEqual([]);
 });

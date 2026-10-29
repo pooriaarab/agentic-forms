@@ -17,8 +17,8 @@ export type SubjectKind = "human" | "agent";
 export interface ClientOptions {
   /** The Worker origin as an absolute URL, for example "https://forms.example.com". A path prefix is kept. */
   baseUrl: string;
-  /** The bearer token for /api/v1. Leave it out to call only `health` and `submit`, which send no token. */
-  token?: string;
+  /** The bearer token for /api/v1. Leave it out to call only `health` and `submit`, which send no token. A function is called before each request, so a host app can refresh the token. */
+  token?: string | (() => string | Promise<string>);
   /** Replaces the global fetch. Use it to add a proxy or a test double. For a service binding, wrap it: `(input, init) => env.FORMS.fetch(input, init)`. */
   fetch?: typeof fetch;
 }
@@ -56,7 +56,7 @@ export class ApiError extends Error {
 
 export function createClient(options: ClientOptions) {
   if (typeof options.baseUrl !== "string" || options.baseUrl === "") throw new TypeError("baseUrl is required");
-  if (options.token !== undefined && (typeof options.token !== "string" || options.token === "")) throw new TypeError("token must be a non-empty string");
+  if (options.token !== undefined && typeof options.token !== "function" && (typeof options.token !== "string" || options.token === "")) throw new TypeError("token must be a non-empty string or a function");
   let parsed: URL;
   try {
     parsed = new URL(options.baseUrl);
@@ -81,7 +81,9 @@ export function createClient(options: ClientOptions) {
     const headers: Record<string, string> = {};
     if (opts.auth !== false) {
       if (options.token === undefined) throw new TypeError("this call needs a token: pass one to createClient");
-      headers.authorization = `Bearer ${options.token}`;
+      const token = typeof options.token === "function" ? await options.token() : options.token;
+      if (typeof token !== "string" || token === "") throw new TypeError("the token function must return a non-empty string");
+      headers.authorization = `Bearer ${token}`;
     }
     if (opts.body !== undefined) headers["content-type"] = "application/json";
     const res = await doFetch(url.toString(), { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), signal: opts.signal });

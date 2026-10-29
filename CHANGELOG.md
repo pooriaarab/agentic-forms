@@ -7,17 +7,28 @@ This file lists what changed in each release. The versions follow semver. The AP
 - Add `agentic-forms/client`, a typed client for the Worker HTTP API. `createClient({ baseUrl, token, fetch? })` has one method per API route and the public submit.
 - A refused call throws `ApiError` with the HTTP `status`, the API `code`, `issues`, and `retryAfter`.
 - Every method takes `{ signal }` to cancel the call. The client never retries.
-- The client uses only web APIs, so it runs in browsers, Workers, and Node 22. It refuses an id of `.` or `..`, so an id cannot change the route.
-- Test the client against the real Worker under `wrangler dev`.
+- The `token` is optional. Without it, only `health` and `submit` work, and other calls reject before they send.
+- The client uses only web APIs, so it runs in Workers, Node 22, and browsers. A browser page must have the same origin as the Worker, because the Worker sends no CORS headers.
+- A call rejects with a `TypeError` for an empty id, `.`, or `..`, so an id cannot change the route. `createClient` throws a `TypeError` for a `baseUrl` that is not absolute or that has a query, a fragment, or user info.
 
 ## 0.2.0
 
+Breaking changes. Read these before you upgrade from 0.1.0:
+
+- Breaking: a share names a `kind`, `human` or `agent`. A person and an agent with the same id hold separate roles. `POST /api/v1/forms/<id>/shares` needs `kind`, and `DELETE /api/v1/forms/<id>/shares/<subject>` needs `?kind=human|agent`.
+- Breaking: grants made before kinds are not honored. Run `POST /api/v1/migrate-grants` right after you deploy, and read `unresolved` in its answer.
+- Breaking: `GET /api/v1/forms/<id>/audit` returns one page of `entries` and a `nextCursor`, not the whole list. It takes `limit` and `cursor`. Follow `nextCursor` to read all rows.
+- Breaking: with no token and no stored credential, `/api/v1` answers 401, not 503.
+- Breaking: the responses list answers 400 for a `limit` that is not a whole number from 1 to 1000, and for a cursor that is not valid.
+- Breaking: the Worker no longer needs the `nodejs_compat` flag. Remove it from your config if you copied it.
+
+Other changes:
+
 - Move to `agentic-identity` 0.4.0.
-- Use credentials kept in the store to sign in to the Worker. The shared `FORMS_API_TOKEN` is now optional and works as a bootstrap.
+- The Worker accepts credentials kept in the store, and they survive a restart. The shared `FORMS_API_TOKEN` is now optional and works as a bootstrap.
+- Add `DELETE /api/v1/forms/<id>`. It erases the form, its answers, and its grants. Only an owner can run it.
 - Answer a bad form id with 400 `invalid_id`, and a missing form with 404 `not_found`.
 - Add `POST /api/v1/backfill-owners` and `backfillOwners` to give forms made before roles an owner row.
-- Revoking a share with `DELETE /api/v1/forms/<id>/shares/<subject>` needs `?kind=human|agent`.
-- E2E tests close the connection on every request.
 
 ## 0.1.0
 

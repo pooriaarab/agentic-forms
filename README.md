@@ -55,6 +55,31 @@ The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: 
 In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. The Worker uses one shared token, which acts as one principal that owns every form it makes.
 Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs at least 32 bytes. With a shorter token the Worker refuses to serve. The token is a bootstrap. The Worker also accepts credentials kept in the store, and they survive a restart. Make one in code: write a principal with `store.put("principals", id, { id, kind: "human", scopes: ["*:admin"] })`, then call `issueCredential(store, { principalId: id, kind: "api_key" })` from agentic-identity. It returns the bearer token once. Only the bearer header counts, not a cookie. With no token set, the Worker logs a warning. With no token and no stored credential, every call answers 401.
 
+## SDK
+
+`agentic-forms/client` calls the Worker over HTTP. It uses only `fetch`, so it runs in browsers, Workers, and Node 22.
+
+```ts
+import { createClient, ApiError } from "agentic-forms/client";
+
+const forms = createClient({ baseUrl: "https://forms.example.com", token: process.env.FORMS_TOKEN! });
+await forms.createForm({ id: "poll", title: "Poll", publish: true, sections: [{ id: "s", title: "S", questions: [{ id: "color", type: "single_choice", label: "Color", choices: ["red", "blue"] }] }] });
+await forms.submit("poll", { color: "red" });
+const { items } = await forms.listResponses("poll");
+try {
+  await forms.getForm("missing");
+} catch (error) {
+  if (error instanceof ApiError) console.log(error.status, error.code); // 404 "not_found"
+}
+```
+
+There is one method per route: `health`, `listForms`, `createForm`, `getForm`, `addQuestion`, `publishForm`, `listResponses`, `exportCsv`, `purge`, `eraseForm`, `share`, `revokeShare`, `listAudit`, `purgeAll`, `migrateGrants`, `backfillOwners`, and the public `submit` (it sends no token).
+
+- A refused call throws `ApiError` with `status` (HTTP status), `code` (the API `error` field), `message`, and `issues` when the API lists faults.
+- Every method takes `{ signal }` last, to cancel the call with an `AbortSignal`. A cancel throws the runtime's `AbortError`.
+- The client never retries. A retry of `createForm`, `submit`, or `purge` could repeat the write, so the caller decides.
+- Pass `fetch` to `createClient` to use a proxy, a service binding, or a test double.
+
 ## Features
 
 - Ten question types: short text, long text, number, email, single choice,

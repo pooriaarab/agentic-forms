@@ -12,11 +12,12 @@ Breaking change for code that composes the schemas. Read it before you upgrade. 
 
 - Sharing from the CLI and MCP. CLI commands `share`, `shares`, and `unshare`, and MCP tools `share_form`, `list_shares`, and `unshare_form`. They call the Worker, because roles live on the server: set `--url` (or `$AGENTIC_FORMS_URL`) and `$AGENTIC_FORMS_TOKEN`. A local file has no roles, so the MCP tools exist only with a Worker. `mcp` with a URL and no token starts without the sharing tools and warns on stderr. The Worker has no share links, so there is no command for them.
 - `GET /api/v1/forms/:id/shares` lists who holds a role on a form (owner only), and the client has `listShares`.
+- Export the `RemoteOptions` type. It is the second argument of `createMcpServer`.
 
 ### Changed
 
 - Move to `agentic-identity` 0.7.x and `agentic-design` 0.3.x. The package depends on these ranges now. The code needed no change.
-- Raise `zod` to 4.6.6 in this package. Versions below 4.6.6 can run out of memory while they validate an oversized constrained collection (GHSA-mrhx-c7xc-m3w5). The `overrides` entry of this repo does not reach a dependency. This release uses `agentic-design` 0.3.2, which asks for zod 3, so an install of `agentic-forms` still has a zod 3 copy under `agentic-design`. `agentic-design` 0.3.3 asks for zod 4. Add an `overrides` entry in your project, or wait for this package to move its `agentic-design` range.
+- Raise `zod` to 4.6.6 in this package. Versions below 4.6.6 can run out of memory while they validate an oversized constrained collection (GHSA-mrhx-c7xc-m3w5). The `overrides` entry of this repo applies only to this repo, not to an install of `agentic-forms`. A fresh install gets `agentic-design` 0.3.3, which uses zod 4. An install that keeps an older lock file pins `agentic-design` 0.3.2, which uses zod 3, so it still has a zod 3 copy. Run `npm update agentic-design`, or add an `overrides` entry in your project, to move it.
 - The publish workflow runs one publish at a time for each ref. A second run waits for the first one to finish. This does not change the package.
 
 ## 0.6.0 - 2026-10-29

@@ -134,6 +134,33 @@ There is one method per API route: `health`, `listForms`, `createForm`, `getForm
 - A 2xx reply that is not JSON rejects with `ApiError` (`code` is `bad_response`).
 - Pass `fetch` to `createClient` to use a proxy or a test double. For a service binding, pass `(input, init) => env.FORMS.fetch(input, init)`.
 
+### Use the repo and the MCP server in your code
+
+The package root exports `createFormRepo` and `createMcpServer`. Use them when your app keeps forms in its own `Store` (the port of `agentic-identity`). The app imports the store and the memory adapter from `agentic-identity`.
+
+```ts
+import { createMemoryStore } from "agentic-identity";
+import { createFormRepo, createMcpServer } from "agentic-forms";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+const store = createMemoryStore();
+const forms = createFormRepo(store); // read with forms.getPublished(id)
+await createMcpServer(store).connect(new StdioServerTransport()); // the eleven tools of `agentic-forms mcp` without a Worker URL
+```
+
+A stdio server writes only MCP messages to stdout, so do not log there.
+
+`createFormRepo(store)` returns:
+
+- `get(id)` reads the head (the latest version, draft or published). It returns `null` when the form is missing. `getVersion(id, version)` reads one frozen version. It returns `null` when that version was never published, or when `erase` removed it.
+- `getPublished(id)` reads the version that takes answers now. It returns `null` when the form is missing or no version is published yet.
+- `list()` reads every head, in order of id, and follows every page.
+- `save(form, { expectedVersion?, expectedRevision? })` stores a draft. It throws `FormError` on unsound logic. `expectedRevision` makes the save a compare-and-set on every change: it throws `VersionConflictError` when any save or publish came after the caller's read, or when the form was erased. `expectedVersion` compares only the version number, and the version changes only when a save follows a publish. So it does not catch a publish, or a second save to the same draft. Use `expectedRevision` for those.
+- `publish(id, { expectedRevision? })` freezes the head as a new version. It throws `FormError` when the form has faults for publishing, `VersionConflictError` when the head changed since `expectedRevision`, and `SnapshotExistsError` rather than replace a frozen version. It throws a plain `Error` when the form does not exist or is already published.
+- `erase(id)` deletes the head first, so no new answer lands, then every frozen version. It is safe to run again.
+
+`createMcpServer(store, remote?)` returns an `McpServer`. Connect it to any transport of `@modelcontextprotocol/sdk`. Without `store`, it uses a memory store that is lost when the process exits. Pass `remote` as `{ url, token }` to add the three sharing tools, as the CLI does with `AGENTIC_FORMS_URL` and `AGENTIC_FORMS_TOKEN`. The MCP tools read and write the store as it is. They do not check a caller's role, so give an agent only the store it may change.
+
 ## UI
 
 The Worker serves a small web UI at `/ui/`. It uses the [`agentic-design`](https://www.npmjs.com/package/agentic-design) package for tokens, controls, dialogs, and the app shell. It calls the API through `agentic-forms/client`.

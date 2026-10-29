@@ -18,6 +18,18 @@ await ops.submit("poll", { color: "red" });
 await ops.exportCsv("poll");
 ```
 
+## Use the remote client
+
+```js
+import { createClient, ApiError } from "agentic-forms/client";
+
+const forms = createClient({ baseUrl: "https://forms.example.com", token });
+await forms.submit("poll", { color: "red" }); // no token needed for submit
+const { items } = await forms.listResponses("poll");
+```
+
+A refused call throws `ApiError` with `status` and `code`. Pass `{ signal }` to cancel. The client never retries. A browser page needs the same origin as the Worker.
+
 ## Use the CLI
 
 ```sh

@@ -67,16 +67,16 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 - Versions: `publish` freezes a version. Editing a published form starts a new
   draft. Old responses stay readable against their own version.
 - `exportCsv` writes every response as CSV. It makes formula cells inert.
-- Agent tools: eight MCP tools and one CLI command each for make, extend, publish, submit, list, export, and purge.
+- Agent tools: nine MCP tools and one CLI command each for make, extend, publish, submit, list, export, and purge.
 - Storage runs on the `Store` port of `agentic-identity`. The Worker uses D1, the
   CLI uses a locked JSON file, and tests use the memory adapter.
 
 - A public fill page at `/f/<form id>`, served by the Worker. One HTML file, system
   fonts, no CDN, no third-party script. A strict content security policy.
 - Built for WCAG 2.2 AA: labels, visible focus, 44px targets, a text error summary.
-- A rate limit per client, and a bot-check hook that is off by default.
+- A rate limit per client, kept in the store so every isolate shares it, and a bot-check hook that is off by default.
 - GDPR: a privacy notice with a required consent box, and a retention period.
-  `purgeExpired` deletes responses past their date.
+  The hourly job and `purgeExpired` hard-delete responses past their date. Reads hide them before the job runs.
 
 ## Limits
 
@@ -85,8 +85,7 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 - The CLI and MCP server keep data in one JSON file. It is safe for several processes, and it is not a database. Each read loads the whole file, so keep it to small data sets. A file in an older format fails with a clear error.
 - Import `createMemoryStore` and the `Store` types from `agentic-identity`. This package does not re-export them.
 - The fill page needs JavaScript and does not show file questions.
-- The rate limit lives in one isolate's memory.
-- You must call `purgeExpired` yourself. Nothing schedules it yet.
+- The Worker deletes expired responses once an hour (a Cron Trigger). The CLI does not schedule: run `purge-all` yourself.
 - No sharing, roles, or sign-in yet. The API uses one shared token.
 - The page test runs the page script in jsdom, not in a real browser.
 - A pattern rule uses RE2 syntax and runs in linear time. Backreferences and lookaround are refused. A pattern has up to 256 characters, and a text with a pattern rule has up to 1000.

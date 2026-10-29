@@ -27,6 +27,7 @@ form logic. A submit checks the answers against the newest published version.
 | list_responses | Read responses as rows, oldest first. |
 | export_csv | Export all responses as CSV. |
 | purge_expired | Delete responses past the retention period. |
+| purge_all | Delete expired responses of every form. |
 
 ## The loop
 

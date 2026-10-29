@@ -26,6 +26,7 @@ Commands:
   responses <id> [--limit n] [--cursor c]                      Print responses as JSON.
   export <id>                                                  Print responses as CSV.
   purge <id>                                                   Delete responses past retention.
+  purge-all                                                    Delete expired responses of every form.
   mcp                                                          Start the MCP server on stdio.
 
 Flags:
@@ -128,6 +129,9 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
         return 0;
       case "export":
         out((await ops.exportCsv(need())).trimEnd());
+        return 0;
+      case "purge-all":
+        out(JSON.stringify(await ops.purgeAll()));
         return 0;
       case "purge":
         out(JSON.stringify(await ops.purge(need())));

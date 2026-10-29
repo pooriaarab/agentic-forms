@@ -76,7 +76,7 @@ export function createFileStore(path: string, options: FileStoreOptions = {}): S
     const bad = () => new Error(`"${path}" is not an agentic-forms data file`);
     const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
     const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (!isObject(raw) || !Number.isSafeInteger(raw.clock) || !isObject(raw.tables)) throw bad();
+    if (!isObject(raw) || !Number.isSafeInteger(raw.clock) || (raw.clock as number) < 0 || !isObject(raw.tables)) throw bad();
     const clock = raw.clock as number;
     const tables: Tables = new Map();
     for (const [name, rows] of Object.entries(raw.tables)) {

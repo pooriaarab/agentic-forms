@@ -4,6 +4,8 @@
   "compatibility_date": "2026-01-01",
   // agentic-identity reads its version through node:module.
   "compatibility_flags": ["nodejs_compat"],
+  // Hard-delete responses past their retention date, every hour.
+  "triggers": { "crons": ["17 * * * *"] },
   "vars": { "FORMS_REGION": "eu" },
   // Create the database in the EU, then paste its id below:
   //   wrangler d1 create agentic-forms --location weur

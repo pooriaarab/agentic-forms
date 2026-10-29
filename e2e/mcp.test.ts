@@ -27,7 +27,7 @@ afterAll(() => client.close());
 describe("mcp over stdio", () => {
   test("lists the tools", async () => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["add_question", "export_csv", "get_form", "list_responses", "new_form", "publish_form", "purge_expired", "submit_response"]);
+    expect(names).toEqual(["add_question", "export_csv", "get_form", "list_responses", "new_form", "publish_form", "purge_all", "purge_expired", "submit_response"]);
   });
 
   test("a logic cycle, a duplicate id, a bad type, and a missing form are tool errors, not crashes", async () => {

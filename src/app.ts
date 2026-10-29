@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { SubmitError } from "./core/responses.js";
 import { FormError } from "./core/repo.js";
 import { createMemoryStore, type Store } from "agentic-identity";
+import { createRateLimiter } from "./core/rate-limit.js";
 import { OpsError, createOps } from "./ops.js";
 import { renderFillPage } from "./page.js";
 import { VERSION } from "./version.js";
@@ -14,7 +15,7 @@ export interface AppOptions {
   store?: Store;
   /** Bearer token for /api/v1, at least 32 bytes. createApp throws on a shorter one. With no token the API answers 503. There is no default. */
   apiToken?: string;
-  /** Submits allowed per client in each window. Defaults to 20 a minute. Pass `false` to turn it off. */
+  /** Submits allowed per client in each window. Defaults to 20 a minute. Pass `false` to turn it off. The counters live in the store. */
   rateLimit?: { limit: number; windowMs: number } | false;
   /** Off by default. Return false to refuse a submit. Plug a check here that runs on your own host. */
   botCheck?: (request: Request, body: Record<string, unknown>) => boolean | Promise<boolean>;
@@ -36,22 +37,7 @@ export function createApp(options: AppOptions = {}) {
   const ops = createOps(store);
   const { repo, responses } = ops;
   const now = options.now ?? Date.now;
-  const limit = options.rateLimit === false ? undefined : (options.rateLimit ?? { limit: 20, windowMs: 60_000 });
-  // Client keys live in memory only. They are never stored or logged.
-  const hits = new Map<string, { count: number; start: number }>();
-
-  const retryAfter = (key: string): number => {
-    if (!limit) return 0;
-    const t = now();
-    if (hits.size > 10_000) for (const [k, v] of hits) if (t - v.start >= limit.windowMs) hits.delete(k);
-    const hit = hits.get(key);
-    if (!hit || t - hit.start >= limit.windowMs) {
-      hits.set(key, { count: 1, start: t });
-      return 0;
-    }
-    hit.count++;
-    return hit.count > limit.limit ? Math.ceil((hit.start + limit.windowMs - t) / 1000) : 0;
-  };
+  const limiter = options.rateLimit === false ? undefined : createRateLimiter(store, options.rateLimit ?? { limit: 20, windowMs: 60_000 }, now);
 
   const app = new Hono();
   app.get("/health", (c) => c.json({ ok: true, version: VERSION }));
@@ -64,7 +50,7 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.post("/f/:id", async (c) => {
-    const wait = retryAfter(c.req.header("cf-connecting-ip") ?? "unknown");
+    const wait = (await limiter?.hit(c.req.header("cf-connecting-ip") ?? "unknown")) ?? 0;
     if (wait > 0) return c.json({ error: "rate_limited" }, 429, { "retry-after": String(wait) });
     const id = c.req.param("id");
     if (!(await repo.getPublished(id))) return c.json({ error: "not_found" }, 404);
@@ -115,6 +101,7 @@ export function createApp(options: AppOptions = {}) {
   app.get(`${forms}/:id/export`, async (c) =>
     c.body(await ops.exportCsv(c.req.param("id")), 200, { "content-type": "text/csv; charset=utf-8", "cache-control": "no-store" }),
   );
+  app.post("/api/v1/purge", async (c) => c.json(await ops.purgeAll(now())));
   app.post(`${forms}/:id/purge`, async (c) => c.json(await ops.purge(c.req.param("id"))));
 
   app.onError((error, c) => {

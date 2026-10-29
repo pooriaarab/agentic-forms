@@ -2,6 +2,7 @@
 import { formSpecSchema, questionSchema } from "./core/schema.js";
 import type { Answers, Form } from "./core/form.js";
 import { createFormRepo } from "./core/repo.js";
+import { purgeRateLimits } from "./core/rate-limit.js";
 import { createResponses } from "./core/responses.js";
 import type { Store } from "agentic-identity";
 
@@ -54,6 +55,12 @@ export function createOps(store: Store) {
     async exportCsv(formId: string) {
       await get(formId);
       return responses.exportCsv(formId);
+    },
+    /** Hard-deletes every form's responses past retention and every finished rate-limit counter. The scheduled job runs this. */
+    async purgeAll(now: number = Date.now()) {
+      let purged = 0;
+      for (const form of await repo.list()) purged += await responses.purgeExpired(form.id, now);
+      return { purged, rateLimits: await purgeRateLimits(store, now) };
     },
     async purge(formId: string) {
       await get(formId);

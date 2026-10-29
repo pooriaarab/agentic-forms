@@ -43,6 +43,7 @@ export function createMcpServer(store: Store = createMemoryStore()): McpServer {
   tool("list_responses", "List responses as rows, oldest first.", { ...form, limit: z.number().int().min(1).max(500).optional(), cursor: z.string().optional() }, true, ({ form: id, ...page }) => ops.listResponses(id, page));
   tool("export_csv", "Export every response as CSV.", form, true, ({ form: id }) => ops.exportCsv(id));
   tool("purge_expired", "Delete responses past the retention period.", form, false, ({ form: id }) => ops.purge(id));
+  tool("purge_all", "Delete expired responses of every form.", {}, false, () => ops.purgeAll());
   return server;
 }
 

@@ -40,7 +40,7 @@ export interface AppOptions {
 }
 
 const PAGE_HEADERS = (nonce: string) => ({
-  "content-security-policy": `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`,
+  "content-security-policy": `default-src 'none'; style-src 'self' 'nonce-${nonce}'; font-src 'self'; script-src 'nonce-${nonce}'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`,
   "x-content-type-options": "nosniff",
   "referrer-policy": "no-referrer",
   "cache-control": "no-store",
@@ -56,6 +56,7 @@ export function createApp(options: AppOptions = {}) {
     options.rateLimit === false ? undefined : createRateLimiter(store, options.rateLimit ?? { limit: 20, windowMs: 60_000 }, options.rateLimitSecret as string, now);
 
   const app = new Hono<{ Variables: { ctx: PrincipalContext } }>();
+  app.get("/", (c) => c.redirect("/ui/"));
   app.get("/health", (c) => c.json({ ok: true, version: VERSION }));
 
   // A malformed id never reaches the store, which would throw on it.

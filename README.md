@@ -86,6 +86,34 @@ There is one method per API route: `health`, `listForms`, `createForm`, `getForm
 - A 2xx reply that is not JSON rejects with `ApiError` (`code` is `bad_response`).
 - Pass `fetch` to `createClient` to use a proxy or a test double. For a service binding, pass `(input, init) => env.FORMS.fetch(input, init)`.
 
+## UI
+
+The Worker serves a small web UI at `/ui/`. It uses the [`agentic-design`](https://www.npmjs.com/package/agentic-design) package for tokens, controls, dialogs, and the app shell. It calls the API through `agentic-forms/client`.
+
+What you can do in it:
+
+- Sign in with an API token. The token stays in the browser tab only (`sessionStorage`). Signing out removes it.
+- List forms, and make a new one.
+- Build a form: add, edit, reorder, and remove questions of every type, with choices, limits, and a "show only when" condition. Save sends the whole draft. A save that follows a change made elsewhere is refused, and the page asks you to reload.
+- Preview the form. The preview shows and hides questions by their conditions and sends nothing.
+- Publish, and copy the share link `/f/<id>`. The link opens the public fill page, which uses the same tokens, in light and dark.
+- Read the responses in a table (100 per page) and export them as CSV.
+- See which questions an agent made or changed. The server sets that mark from the caller. A person who signs in with a stored credential makes questions marked as human. The shared `FORMS_API_TOKEN` acts as an agent, so every question made through it shows the agent mark.
+
+Run it on your machine:
+
+```sh
+npm ci
+npm run build:ui
+WRANGLER_SEND_METRICS=false npx wrangler dev --local \
+  --var FORMS_REGION:unknown --var FORMS_UNSAFE_LOCAL_REGION:1 \
+  --var FORMS_RATE_SECRET:$(openssl rand -hex 32) --var FORMS_API_TOKEN:$(openssl rand -hex 32)
+```
+
+Open `http://127.0.0.1:8787/ui/` and sign in with the value you gave `FORMS_API_TOKEN`. Run the browser tests with `npm run test:ui`: Playwright starts `wrangler dev`, builds a form, fills it by its link, reads the response, reloads, and runs an axe WCAG 2.2 AA scan on every view in light and dark. Screenshots of each view in both schemes are in `docs/screenshots/`. They are rewritten on each run.
+
+The UI is not in the npm package. Deploy it from a checkout with `npm run build:ui && wrangler deploy`. A file upload question shows in the builder, but the form page cannot take files yet. The UI makes no request to another site, and it loads its fonts from the Worker.
+
 ## Features
 
 - Ten question types: short text, long text, number, email, single choice,

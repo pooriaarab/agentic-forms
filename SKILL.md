@@ -30,6 +30,10 @@ agentic-forms responses poll
 
 Start it with `agentic-forms mcp`. The tools are `new_form`, `add_question`, `update_form`, `publish_form`, `get_form`, `submit_response`, `list_responses`, `export_csv`, `purge_expired`, and `purge_all`.
 
+## The web UI
+
+People use the web UI at `/ui/` on the Worker. An agent never needs it: every UI action is a tool, a command, or an API call. Questions an agent makes or changes show an "Agent" mark in the UI.
+
 ## Rules
 
 - Report each error as a failure.

@@ -42,7 +42,7 @@ describe("remote client against the Worker", () => {
     expect((await api.health()).ok).toBe(true);
     const spec = { id: "poll", title: "Poll", notice: "We keep answers.", sections: [{ id: "s", title: "S", questions: [{ id: "color", type: "single_choice" as const, label: "Color", required: true, choices: ["red", "blue"] }] }] };
     expect((await api.createForm(spec)).status).toBe("draft");
-    await api.addQuestion("poll", { id: "note", type: "short_text", label: "Note" });
+    await api.addQuestion("poll", { id: "note", type: "short_text", label: "Note" }, { section: "s" });
     expect((await api.publishForm("poll")).status).toBe("published");
     expect((await api.getForm("poll")).sections[0]!.questions.map((q) => q.id)).toEqual(["color", "note"]);
     expect((await api.listForms()).map((f) => f.id)).toEqual(["poll"]);
@@ -65,7 +65,7 @@ describe("remote client against the Worker", () => {
     expect((await api.listAudit("poll")).entries.length).toBeGreaterThan(0);
     expect(await api.purgeAll()).toMatchObject({ purged: 0 });
     expect(await api.backfillOwners("ada")).toMatchObject({ skipped: expect.any(Number) });
-    await api.migrateGrants();
+    expect(await api.migrateGrants()).toMatchObject({ migrated: expect.any(Number), unresolved: [] });
 
     expect(await api.eraseForm("poll")).toMatchObject({ ok: true });
     expect(await caught(api.getForm("poll"))).toMatchObject({ status: 404, code: "not_found" });
@@ -82,6 +82,8 @@ describe("remote client against the Worker", () => {
     expect(await caught(api.getForm("nothing-here"))).toMatchObject({ status: 404, code: "not_found" });
     expect(await caught(api.getForm("Bad Id!"))).toMatchObject({ status: 400, code: "invalid_id" });
     expect(await caught(api.submit("nothing-here", {}))).toMatchObject({ status: 404, code: "not_found" });
+    // The public page answers a bad id with text. The text becomes the message.
+    expect(await caught(api.submit("Bad Id!", {}))).toMatchObject({ status: 400, code: "http_400", message: "This form id is not valid." });
   });
 
   test("a bad spec is a typed 400 with issues", async () => {
@@ -97,6 +99,14 @@ describe("remote client against the Worker", () => {
     expect(error).toMatchObject({ name: "AbortError" });
   });
 
+  test("a signal aborts a call in flight", async () => {
+    const controller = new AbortController();
+    const inFlight: typeof fetch = (_input, init) => new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
+    const pending = caught(createClient({ baseUrl, token: TOKEN, fetch: inFlight }).listForms({ signal: controller.signal }));
+    controller.abort();
+    expect(await pending).toMatchObject({ name: "AbortError" });
+  });
+
   test("a failed call is never retried", async () => {
     let calls = 0;
     const counting: typeof fetch = (input, init) => (calls++, fetchClose(input, init));
@@ -105,7 +115,21 @@ describe("remote client against the Worker", () => {
   });
 });
 
-test("the client needs a base URL and a token", () => {
-  expect(() => createClient({ baseUrl: "", token: "t" })).toThrow(TypeError);
-  expect(() => createClient({ baseUrl, token: "" })).toThrow(TypeError);
+describe("the client without a token", () => {
+  test("submit and health work, and an API call throws before it sends", async () => {
+    const api = createClient({ baseUrl, fetch: fetchClose });
+    expect((await api.health()).ok).toBe(true);
+    expect(await caught(api.submit("nothing-here", {}))).toMatchObject({ status: 404 });
+    expect(await caught(api.listForms())).toBeInstanceOf(TypeError);
+  });
+
+  test("a 429 keeps the retry-after seconds", async () => {
+    const limited: typeof fetch = async () => new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { "retry-after": "17" } });
+    expect(await caught(createClient({ baseUrl, fetch: limited }).submit("poll", {}))).toMatchObject({ status: 429, code: "rate_limited", retryAfter: 17 });
+  });
+
+  test("a bad base URL or an empty token is refused", () => {
+    expect(() => createClient({ baseUrl: "", token: "t" })).toThrow(TypeError);
+    expect(() => createClient({ baseUrl, token: "" })).toThrow(TypeError);
+  });
 });

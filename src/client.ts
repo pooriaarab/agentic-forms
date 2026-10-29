@@ -16,8 +16,8 @@ export type SubjectKind = "human" | "agent";
 export interface ClientOptions {
   /** The Worker origin, for example "https://forms.example.com". A path prefix is kept. */
   baseUrl: string;
-  /** The bearer token for /api/v1. */
-  token: string;
+  /** The bearer token for /api/v1. Leave it out to call only `health` and `submit`, which send no token. */
+  token?: string;
   /** Replaces the global fetch. Use it to add a proxy, a service binding, or a test double. */
   fetch?: typeof fetch;
 }
@@ -40,19 +40,22 @@ export class ApiError extends Error {
   readonly body: unknown;
   /** Set when the body lists faults: a bad spec (400), or answers that fail the form (422). */
   readonly issues?: unknown[];
-  constructor(status: number, code: string, message: string, body?: unknown, issues?: unknown[]) {
+  /** Seconds to wait, from the `retry-after` header of a 429. */
+  readonly retryAfter?: number;
+  constructor(status: number, code: string, message: string, body?: unknown, issues?: unknown[], retryAfter?: number) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.body = body;
     if (issues !== undefined) this.issues = issues;
+    if (retryAfter !== undefined) this.retryAfter = retryAfter;
   }
 }
 
 export function createClient(options: ClientOptions) {
   if (typeof options.baseUrl !== "string" || options.baseUrl === "") throw new TypeError("baseUrl is required");
-  if (typeof options.token !== "string" || options.token === "") throw new TypeError("token is required");
+  if (options.token !== undefined && (typeof options.token !== "string" || options.token === "")) throw new TypeError("token must be a non-empty string");
   const base = options.baseUrl.replace(/\/+$/, "");
   const doFetch = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init));
   const id = encodeURIComponent;
@@ -61,7 +64,10 @@ export function createClient(options: ClientOptions) {
     const url = new URL(base + path);
     for (const [key, value] of Object.entries(opts.query ?? {})) if (value !== undefined) url.searchParams.set(key, String(value));
     const headers: Record<string, string> = {};
-    if (opts.auth !== false) headers.authorization = `Bearer ${options.token}`;
+    if (opts.auth !== false) {
+      if (options.token === undefined) throw new TypeError("this call needs a token: pass one to createClient");
+      headers.authorization = `Bearer ${options.token}`;
+    }
     if (opts.body !== undefined) headers["content-type"] = "application/json";
     const res = await doFetch(url.toString(), { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), signal: opts.signal });
     if (res.ok) return res;
@@ -72,8 +78,11 @@ export function createClient(options: ClientOptions) {
     } catch {}
     const record = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
     const code = typeof record.error === "string" ? record.error : `http_${res.status}`;
-    const message = typeof record.message === "string" ? record.message : `${method} ${path} failed: ${res.status} ${code}`;
-    throw new ApiError(res.status, code, message, body, Array.isArray(record.issues) ? record.issues : undefined);
+    // A body that is not JSON (the public page answers text) still explains the fault.
+    const plain = body === undefined && text !== "" && text.length <= 200 && !text.trimStart().startsWith("<") ? text : undefined;
+    const message = typeof record.message === "string" ? record.message : (plain ?? `${method} ${path} failed: ${res.status} ${code}`);
+    const wait = Number(res.headers.get("retry-after"));
+    throw new ApiError(res.status, code, message, body, Array.isArray(record.issues) ? record.issues : undefined, Number.isFinite(wait) && res.headers.get("retry-after") !== null ? wait : undefined);
   }
   const json = async <T>(method: string, path: string, opts: Parameters<typeof send>[2] = {}): Promise<T> => (await send(method, path, opts)).json() as Promise<T>;
   const form = (formId: string) => `/api/v1/forms/${id(formId)}`;
@@ -88,8 +97,8 @@ export function createClient(options: ClientOptions) {
     /** GET /api/v1/forms/:id. */
     getForm: (formId: string, call: CallOptions = {}) => json<Form>("GET", form(formId), call),
     /** POST /api/v1/forms/:id/questions. On a published form this starts a new draft version. */
-    addQuestion: (formId: string, question: QuestionInput, sectionId?: string, call: CallOptions = {}) =>
-      json<Form>("POST", `${form(formId)}/questions`, { ...call, body: { question, section: sectionId } }),
+    addQuestion: (formId: string, question: QuestionInput, addOptions: { section?: string } & CallOptions = {}) =>
+      json<Form>("POST", `${form(formId)}/questions`, { signal: addOptions.signal, body: { question, section: addOptions.section } }),
     /** POST /api/v1/forms/:id/publish. */
     publishForm: (formId: string, call: CallOptions = {}) => json<Form>("POST", `${form(formId)}/publish`, call),
     /** GET /api/v1/forms/:id/responses. One page, oldest first. Pass `nextCursor` back as `cursor`. */
@@ -113,7 +122,7 @@ export function createClient(options: ClientOptions) {
     /** POST /api/v1/purge. Every form at once. Needs the all-forms admin scope. */
     purgeAll: (call: CallOptions = {}) => json<{ purged: number; rateLimits: number }>("POST", "/api/v1/purge", call),
     /** POST /api/v1/migrate-grants. Needs the all-forms admin scope. */
-    migrateGrants: (call: CallOptions = {}) => json<Record<string, unknown>>("POST", "/api/v1/migrate-grants", call),
+    migrateGrants: (call: CallOptions = {}) => json<{ migrated: number; unresolved: string[] }>("POST", "/api/v1/migrate-grants", call),
     /** POST /api/v1/backfill-owners. One page per call: go on while `nextCursor` is set. Needs the all-forms admin scope. */
     backfillOwners: (owner: string, query: { limit?: number; cursor?: string } = {}, call: CallOptions = {}) =>
       json<BackfillResult>("POST", "/api/v1/backfill-owners", { ...call, body: { owner, ...query } }),

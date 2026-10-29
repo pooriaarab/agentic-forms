@@ -6,6 +6,19 @@ const id = z.string().min(1).max(100);
 // A form id is also a store id and a sharing resource id, so it holds only letters, digits, "-" and "_".
 // The store keeps ids of the form __name__ for itself.
 export const FORM_ID = /^(?!__.*__$)[A-Za-z0-9_-]{1,100}$/;
+/** A principal id, as sharing takes it for a subject. */
+export const SUBJECT_ID = /^[A-Za-z0-9_-]{1,128}$/;
+/** A cursor is base64url of JSON [value, id]. Stores differ in what they do with a crafted one, so check the shape first. */
+export function wellFormedCursor(cursor: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(atob(cursor.replace(/-/g, "+").replace(/_/g, "/")));
+    if (!Array.isArray(parsed) || parsed.length !== 2) return false;
+    const [value, id] = parsed;
+    return typeof id === "string" && (value === null || ["string", "number", "boolean"].includes(typeof value));
+  } catch {
+    return false;
+  }
+}
 const formId = z.string().regex(FORM_ID);
 const condition = z
   .object({

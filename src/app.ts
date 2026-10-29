@@ -5,26 +5,16 @@ import { FormError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
 import { ROLES, createMemoryStore, createSharing, hasScope, type Action, type Auth, type PrincipalContext, type Role, type Store } from "agentic-identity";
 import { clientKey, createRateLimiter } from "./core/rate-limit.js";
-import { FORM_ID } from "./core/schema.js";
+import { BackfillError } from "./core/backfill.js";
+import { FORM_ID, SUBJECT_ID, wellFormedCursor } from "./core/schema.js";
 import { OpsError, createOps } from "./ops.js";
 import { renderFillPage } from "./page.js";
 import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
-const SUBJECT = /^[A-Za-z0-9_-]{1,128}$/;
+const SUBJECT = SUBJECT_ID;
 const MAX_LIMIT = 1000;
 
-/** A cursor is base64url of JSON [value, id]. Stores differ in what they do with a crafted one, so check the shape here. */
-function wellFormedCursor(cursor: string): boolean {
-  try {
-    const parsed: unknown = JSON.parse(atob(cursor.replace(/-/g, "+").replace(/_/g, "/")));
-    if (!Array.isArray(parsed) || parsed.length !== 2) return false;
-    const [value, id] = parsed;
-    return typeof id === "string" && (value === null || ["string", "number", "boolean"].includes(typeof value));
-  } catch {
-    return false;
-  }
-}
 const SHARE_ROLES: readonly Role[] = ["owner", "editor", "viewer"];
 
 /** The caller may not do this. A caller with no role on the form gets 404, so a form id never leaks. */
@@ -234,9 +224,19 @@ export function createApp(options: AppOptions = {}) {
     return c.json(await ops.purgeAll(now()));
   });
 
+  // For forms made before roles. Only a caller with the all-forms admin scope may run it.
+  app.post("/api/v1/backfill-owners", async (c) => {
+    if (!hasScope(c.get("ctx").scopes, "*:admin")) throw new AccessError(403);
+    const body = await c.req.json();
+    const { owner, cursor, limit } = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+    // backfillOwners checks the owner, limit and cursor, and throws a BackfillError that onError maps to 400.
+    return c.json(await ops.backfillOwners(owner as string, { cursor: cursor as string | undefined, limit: limit as number | undefined }));
+  });
+
   app.onError((error, c) => {
     if (error instanceof AccessError) return c.json({ error: error.status === 404 ? "not_found" : "forbidden" }, error.status);
     if (error instanceof OpsError) return c.json({ error: error.kind, message: error.message }, error.kind === "not_found" ? 404 : 409);
+    if (error instanceof BackfillError) return c.json({ error: error.kind, message: error.message }, 400);
     if (error instanceof FormError || error instanceof SubmitError) return c.json({ error: "invalid", issues: error.issues }, 422);
     if (error instanceof ZodError) return c.json({ error: "invalid_spec", issues: error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) }, 400);
     if (error instanceof SyntaxError) return c.json({ error: "bad_json" }, 400);

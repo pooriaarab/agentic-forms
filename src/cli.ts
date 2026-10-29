@@ -2,6 +2,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { ZodError } from "zod";
+import { BackfillError } from "./core/backfill.js";
 import { FormError } from "./core/repo.js";
 import { createFileStore } from "./core/file-store.js";
 import type { Answers } from "./core/form.js";
@@ -27,6 +28,7 @@ Commands:
   export <id>                                                  Print responses as CSV.
   purge <id>                                                   Delete responses past retention.
   purge-all                                                    Delete expired responses of every form.
+  backfill-owners --owner <id>                                 Give forms made before roles an owner. Safe to run again.
   mcp                                                          Start the MCP server on stdio.
 
 Flags:
@@ -133,6 +135,29 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       case "purge-all":
         out(JSON.stringify(await ops.purgeAll()));
         return 0;
+      case "backfill-owners": {
+        const total = { created: [] as string[], skipped: 0, conflicts: [] as string[], invalid: [] as string[] };
+        const owner = str("owner");
+        let cursor: string | undefined;
+        let pages = 0;
+        try {
+          do {
+            const page = await ops.backfillOwners(owner, { cursor });
+            pages++;
+            total.created.push(...page.created);
+            total.skipped += page.skipped;
+            total.conflicts.push(...page.conflicts);
+            total.invalid.push(...page.invalid);
+            cursor = page.nextCursor;
+          } while (cursor !== undefined);
+        } catch (error) {
+          // A second run skips the forms done so far. Show what this run did before the error.
+          if (pages > 0) err(`backfill stopped after: ${JSON.stringify(total)}`);
+          throw error;
+        }
+        out(JSON.stringify(total));
+        return 0;
+      }
       case "purge":
         out(JSON.stringify(await ops.purge(need())));
         return 0;
@@ -145,7 +170,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       return 2;
     }
     if (error instanceof ZodError) err(`error: ${error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`);
-    else if (error instanceof OpsError || error instanceof FormError || error instanceof SubmitError || error instanceof SyntaxError) err(`error: ${error.message}`);
+    else if (error instanceof OpsError || error instanceof BackfillError || error instanceof FormError || error instanceof SubmitError || error instanceof SyntaxError) err(`error: ${error.message}`);
     else throw error;
     return 1;
   }

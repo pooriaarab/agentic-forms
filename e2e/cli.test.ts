@@ -61,6 +61,18 @@ describe("cli purge-all", () => {
   });
 });
 
+describe("cli backfill-owners", () => {
+  test("it gives forms an owner once, and a second run changes nothing", async () => {
+    cli(["new", "old-form", "--title", "Old"]);
+    const first = json(cli(["backfill-owners", "--owner", "olga"]).out);
+    expect(first.created).toContain("old-form");
+    expect((await createFileStore(data).get("grants", "old-form:olga"))?.role).toBe("owner");
+    expect(json(cli(["backfill-owners", "--owner", "olga"]).out).created).toEqual([]);
+    expect(cli(["backfill-owners"]).code).toBe(2);
+    expect(cli(["backfill-owners", "--owner", "a b"]).code).toBe(1);
+  });
+});
+
 describe("cli flow", () => {
   test("new, add-question, publish, submit, responses, export", () => {
     expect(json(cli(["new", "poll", "--title", "Poll", "--retention-days", "30"]).out)).toMatchObject({ version: 1, status: "draft" });

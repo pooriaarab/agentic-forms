@@ -1,11 +1,11 @@
 // Runs the Worker under `wrangler dev`, drives /api/v1 over HTTP, then fills in the
 // public page with jsdom (it runs the page's own script) and reads the row back.
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JSDOM } from "jsdom";
+import { seed } from "./seed.js";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 // Every fetch closes its connection. (JSDOM.fromURL loads the page on its own connection and is not covered.) A kept-alive socket sits idle while a test
@@ -25,8 +25,10 @@ const stop = (proc: ChildProcess) => new Promise((resolve) => (proc.once("exit",
 // refuses to start answers 500, so readiness is "any HTTP status".
 async function start(port: number, token?: string, options: { persist?: string; vars?: string[]; scheduled?: boolean } = {}): Promise<ChildProcess> {
   const local = options.vars?.some((v) => v.startsWith("FORMS_REGION:")) ? [] : ["--var", "FORMS_REGION:unknown", "--var", "FORMS_UNSAFE_LOCAL_REGION:1"]; // local D1 reports no region
-  const vars = [...local, ...(options.vars?.some((v) => v.startsWith("FORMS_RATE_SECRET:")) ? [] : ["--var", `FORMS_RATE_SECRET:${RATE_SECRET}`]), ...(token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`]), ...(options.vars ?? []).flatMap((v) => ["--var", v])];
-  const proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(port), ...(options.scheduled ? ["--test-scheduled"] : []), "--persist-to", options.persist ?? mkdtempSync(join(tmpdir(), "forms-d1-")), ...vars], {
+  const vars = [...local, ...(options.vars?.some((v) => v.startsWith("FORMS_RATE_SECRET:")) ? [] : ["--var", `FORMS_RATE_SECRET:${RATE_SECRET}`]), ...(options.vars ?? []).flatMap((v) => ["--var", v])];
+  const persist = options.persist ?? mkdtempSync(join(tmpdir(), "forms-d1-"));
+  if (token !== undefined) seed(persist, token); // the token is a credential kept in the store
+  const proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(port), ...(options.scheduled ? ["--test-scheduled"] : []), "--persist-to", persist, ...vars], {
     env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
   });
   running.push(proc);
@@ -83,46 +85,40 @@ describe("secret failures", () => {
     expect((await fetch("http://127.0.0.1:8800/health")).status).toBe(200);
   });
 
-  test("a credential kept in the store works with no shared token, and after a restart", async () => {
+  test("a credential kept in the store works after a restart, and a wrong one or a cookie is 401", async () => {
     const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
-    const sql = (command: string) =>
-      execFileSync("node_modules/.bin/wrangler", ["d1", "execute", "DB", "--local", "--persist-to", persist, "--json", "--command", command], {
-        encoding: "utf8",
-        env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
-      });
-    // Start once so the schema exists, then write a principal and a credential the way issueCredential does.
-    await stop(await start(8808, undefined, { persist }));
     const token = "aid_e2e-store-credential-0123456789";
-    const hash = createHash("sha256").update(token).digest("hex");
-    const doc = (value: object) => JSON.stringify(value).replace(/'/g, "''");
-    sql(`INSERT INTO store_docs (collection, id, body, version) VALUES ('principals', 'ada', '${doc({ id: "ada", kind: "human", scopes: ["*:admin"] })}', 1), ('credentials', '${hash}', '${doc({ principalId: "ada", kind: "session" })}', 1)`);
     const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
     const open = { id: "durable", title: "Durable", sections: [{ id: "s", title: "S", questions: [{ id: "n", type: "short_text", label: "N" }] }] };
-    const first = await start(8809, undefined, { persist });
+    const first = await start(8809, token, { persist });
     expect((await fetch("http://127.0.0.1:8809/api/v1/forms", { method: "POST", headers, body: JSON.stringify(open) })).status).toBe(201);
     await stop(first);
 
-    await start(8812, TOKEN, { persist }); // the shared token and the stored credential work side by side
+    await start(8812, undefined, { persist });
     const list = await (await fetch("http://127.0.0.1:8812/api/v1/forms", { headers })).json();
     expect(list.forms.map((f: { id: string }) => f.id)).toEqual(["durable"]);
-    expect((await fetch("http://127.0.0.1:8812/api/v1/forms", { headers })).status).toBe(200);
-    expect((await fetch("http://127.0.0.1:8812/api/v1/forms", { headers: auth })).status).toBe(200);
     expect((await fetch("http://127.0.0.1:8812/api/v1/forms", { headers: { authorization: "Bearer aid_wrong" } })).status).toBe(401);
     expect((await fetch("http://127.0.0.1:8812/api/v1/forms", { headers: { cookie: `session=${token}` } })).status).toBe(401);
   });
 
-  test("a token under 32 bytes makes the Worker refuse to serve", async () => {
-    await start(8801, "a".repeat(31));
-    for (const path of ["/health", "/api/v1/forms", "/f/x"]) {
-      const res = await fetch(`http://127.0.0.1:8801${path}`, { headers: { authorization: `Bearer ${"a".repeat(31)}` } });
-      expect(res.status, path).toBe(500);
+  test("FORMS_API_TOKEN is ignored: the old shared token is 401", async () => {
+    const shared = "f".repeat(40);
+    await start(8801, undefined, { vars: [`FORMS_API_TOKEN:${shared}`] });
+    for (const path of ["/api/v1/forms", "/api/v1/forms/x"]) {
+      expect((await fetch(`http://127.0.0.1:8801${path}`, { headers: { authorization: `Bearer ${shared}` } })).status, path).toBe(401);
     }
+    expect((await fetch("http://127.0.0.1:8801/health")).status).toBe(200);
   });
 
-  test("a token of exactly 32 bytes is accepted", async () => {
-    await start(8802, "b".repeat(32));
-    const res = await fetch("http://127.0.0.1:8802/api/v1/forms", { headers: { authorization: `Bearer ${"b".repeat(32)}` } });
-    expect(res.status).toBe(200);
+  test("a valid credential without the scope is 403, not 401", async () => {
+    const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
+    const reader = "aid_e2e-reader-credential-0123456789";
+    seed(persist, reader, ["form:read"], "rita");
+    await start(8802, undefined, { persist });
+    const headers = { authorization: `Bearer ${reader}`, "content-type": "application/json" };
+    const made = await fetch("http://127.0.0.1:8802/api/v1/forms", { method: "POST", headers, body: JSON.stringify({ id: "nope", title: "No", sections: [] }) });
+    expect(made.status).toBe(403);
+    expect((await fetch("http://127.0.0.1:8802/api/v1/forms", { headers })).status).toBe(200);
   });
 });
 
@@ -179,12 +175,12 @@ describe("durable storage", () => {
       ["unknown, flag true", ["FORMS_REGION:unknown", "FORMS_UNSAFE_LOCAL_REGION:true"]],
     ];
     for (const [i, [name, vars]] of cases.entries()) {
-      await start(8830 + i, TOKEN, { vars });
+      await start(8830 + i, undefined, { vars });
       expect((await fetch(`http://127.0.0.1:${8830 + i}/health`)).status, name).toBe(500);
     }
-    // The flag leaves "eu" strict: local D1 reports no region, so the first read fails.
+    // The flag leaves "eu" strict: local D1 reports no region, so the first read fails. The credential lookup is that read, so the answer is 503 and nothing is served.
     await start(8840, TOKEN, { vars: ["FORMS_REGION:eu", "FORMS_UNSAFE_LOCAL_REGION:1"] });
-    expect((await fetch("http://127.0.0.1:8840/api/v1/forms", { headers: auth })).status).toBe(500);
+    expect((await fetch("http://127.0.0.1:8840/api/v1/forms", { headers: auth })).status).toBe(503);
   });
 });
 

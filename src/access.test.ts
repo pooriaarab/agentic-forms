@@ -4,7 +4,6 @@ import { createMemoryAuth, createMemoryStore, createSharing, createStoreAuth, is
 import { beforeEach, describe, expect, test } from "vitest";
 import { createApp } from "./app.js";
 import { createFormRepo } from "./core/repo.js";
-import { createTokenAuth } from "./core/token-auth.js";
 
 const SECRET = "r".repeat(32);
 const human = (id: string, scopes = ["*:admin"]): PrincipalContext => ({ principalId: id, kind: "human", chain: [{ id, kind: "human" }], scopes });
@@ -211,10 +210,9 @@ describe("keeping an owner", () => {
     expect((await call(olga, "POST", "/a/shares", { subject: "sam", kind: "human", role: "commenter" })).status).toBe(400);
   });
 
-  test("a caller with an empty chain is 401, and a token over 512 bytes cannot be set", async () => {
+  test("a caller with an empty chain is 401", async () => {
     const odd = await issue({ principalId: "x", kind: "human", chain: [], scopes: ["*:admin"] });
     expect((await call(odd, "POST", "", spec("a"))).status).toBe(401);
-    expect(() => createTokenAuth("t".repeat(513))).toThrow("API token");
   });
 });
 

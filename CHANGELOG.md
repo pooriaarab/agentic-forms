@@ -2,7 +2,7 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
-## 0.3.0
+## 0.3.0 - 2026-10-29
 
 - Add `agentic-forms/client`, a typed client for the Worker HTTP API. `createClient({ baseUrl, token, fetch? })` has one method per API route and the public submit.
 - A refused call throws `ApiError` with the HTTP `status`, the API `code`, `issues`, and `retryAfter`.
@@ -11,7 +11,7 @@ This file lists what changed in each release. The versions follow semver. The AP
 - The client uses only web APIs, so it runs in Workers, Node 22, and browsers. A browser page must have the same origin as the Worker, because the Worker sends no CORS headers.
 - A call rejects with a `TypeError` for an empty id, `.`, or `..`, so an id cannot change the route. `createClient` throws a `TypeError` for a `baseUrl` that is not absolute or that has a query, a fragment, or user info.
 
-## 0.2.0
+## 0.2.0 - 2026-10-29
 
 Breaking changes. Read these before you upgrade from 0.1.0:
 
@@ -20,6 +20,7 @@ Breaking changes. Read these before you upgrade from 0.1.0:
 - Breaking: `GET /api/v1/forms/<id>/audit` returns one page of `entries` and a `nextCursor`, not the whole list. It takes `limit` and `cursor`. Follow `nextCursor` to read all rows.
 - Breaking: with no token and no stored credential, `/api/v1` answers 401, not 503.
 - Breaking: the responses list answers 400 for a `limit` that is not a whole number from 1 to 1000, and for a cursor that is not valid.
+- Breaking: a form id of the form `__name__` is refused at create, because the store keeps these ids.
 - Breaking: the Worker no longer needs the `nodejs_compat` flag. Remove it from your config if you copied it.
 
 Other changes:
@@ -28,9 +29,9 @@ Other changes:
 - The Worker accepts credentials kept in the store, and they survive a restart. The shared `FORMS_API_TOKEN` is now optional and works as a bootstrap.
 - Add `DELETE /api/v1/forms/<id>`. It erases the form, its answers, and its grants. Only an owner can run it.
 - Answer a bad form id with 400 `invalid_id`, and a missing form with 404 `not_found`.
-- Add `POST /api/v1/backfill-owners` and `backfillOwners` to give forms made before roles an owner row.
+- Add `POST /api/v1/backfill-owners`, `backfillOwners`, `BackfillError`, and the `backfill-owners` CLI command to give forms made before roles an owner row.
 
-## 0.1.0
+## 0.1.0 - 2026-10-28
 
 - First npm release: the form model, responses as table rows, the public fill page, the CLI, the MCP server, and the Worker API.
 - Forms run on the shared `Store` port of `agentic-identity`, with owners, roles, sharing, and an audit log.

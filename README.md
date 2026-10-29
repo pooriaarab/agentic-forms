@@ -144,14 +144,16 @@ import { createFormRepo, createMcpServer } from "agentic-forms";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 const store = createMemoryStore();
-const forms = createFormRepo(store); // read with forms.getPublished(id); a stdio server writes only MCP messages to stdout
+const forms = createFormRepo(store); // read with forms.getPublished(id)
 await createMcpServer(store).connect(new StdioServerTransport()); // the eleven tools of `agentic-forms mcp`
 ```
+
+A stdio server writes only MCP messages to stdout, so do not log there.
 
 `createFormRepo(store)` returns:
 
 - `get(id)` and `getVersion(id, version)` read the head (the latest version, draft or published) or one frozen version. Each returns `null` when the form is not there.
-- `getPublished(id)` reads the version that takes answers now.
+- `getPublished(id)` reads the version that takes answers now. It returns `null` when the form is missing or no version is published yet.
 - `list()` reads every head, in order of id, and follows every page.
 - `save(form, { expectedVersion?, expectedRevision? })` stores a draft. It throws `FormError` on unsound logic. With `expectedVersion` or `expectedRevision`, the save is a compare-and-set: it throws `VersionConflictError` when the form changed since the caller read it.
 - `publish(id, { expectedRevision? })` freezes the head as a new version. It throws `FormError` when the form has faults for publishing, `VersionConflictError` when the head changed since `expectedRevision`, and `SnapshotExistsError` rather than replace a frozen version. It throws a plain `Error` when the form does not exist or is already published.

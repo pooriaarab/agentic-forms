@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { ApiError, createClient } from "../src/client.js";
+import { seed } from "./seed.js";
 
 const TOKEN = "e2e-client-token-0123456789-0123456789";
 const RATE_SECRET = "e2e-rate-secret-0123456789-0123456789";
@@ -16,7 +17,9 @@ const fetchClose: typeof fetch = (input, init) => fetch(input, { ...init, header
 let proc: ChildProcess;
 
 beforeAll(async () => {
-  proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(PORT), "--inspector-port", "9330", "--persist-to", mkdtempSync(join(tmpdir(), "forms-d1-")), "--var", "FORMS_REGION:unknown", "--var", "FORMS_UNSAFE_LOCAL_REGION:1", "--var", `FORMS_RATE_SECRET:${RATE_SECRET}`, "--var", `FORMS_API_TOKEN:${TOKEN}`], {
+  const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
+  seed(persist, TOKEN, undefined, "bot", "agent"); // the token is a credential kept in the store
+  proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(PORT), "--inspector-port", "9330", "--persist-to", persist, "--var", "FORMS_REGION:unknown", "--var", "FORMS_UNSAFE_LOCAL_REGION:1", "--var", `FORMS_RATE_SECRET:${RATE_SECRET}`], {
     env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
   });
   let log = "";

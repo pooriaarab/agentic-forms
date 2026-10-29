@@ -56,6 +56,13 @@ export class ApiError extends Error {
 export function createClient(options: ClientOptions) {
   if (typeof options.baseUrl !== "string" || options.baseUrl === "") throw new TypeError("baseUrl is required");
   if (options.token !== undefined && (typeof options.token !== "string" || options.token === "")) throw new TypeError("token must be a non-empty string");
+  let parsed: URL;
+  try {
+    parsed = new URL(options.baseUrl);
+  } catch {
+    throw new TypeError("baseUrl must be an absolute URL");
+  }
+  if (parsed.search !== "" || parsed.hash !== "") throw new TypeError("baseUrl must have no query or fragment");
   const base = options.baseUrl.replace(/\/+$/, "");
   const doFetch = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init));
   const id = encodeURIComponent;
@@ -88,7 +95,9 @@ export function createClient(options: ClientOptions) {
     const res = await send(method, path, opts);
     try {
       return (await res.json()) as T;
-    } catch {
+    } catch (error) {
+      // Only a parse fault is the reply's fault. A cancel or a dropped connection keeps its own error.
+      if (!(error instanceof SyntaxError)) throw error;
       // A proxy or a wrong baseUrl can answer 200 with a page that is not JSON.
       throw new ApiError(res.status, "bad_response", `${method} ${path} answered ${res.status} with a body that is not JSON`);
     }
@@ -97,43 +106,47 @@ export function createClient(options: ClientOptions) {
 
   return {
     /** GET /health. Needs no token. */
-    health: (call: CallOptions = {}) => json<{ ok: true; version: string }>("GET", "/health", { ...call, auth: false }),
+    health: (call: CallOptions = {}) => json<{ ok: true; version: string }>("GET", "/health", { signal: call.signal, auth: false }),
     /** GET /api/v1/forms. The forms the token's principal holds a role on. */
-    listForms: async (call: CallOptions = {}) => (await json<{ forms: Form[] }>("GET", "/api/v1/forms", call)).forms,
+    listForms: async (call: CallOptions = {}) => (await json<{ forms: Form[] }>("GET", "/api/v1/forms", { signal: call.signal })).forms,
     /** POST /api/v1/forms. Pass `publish` to open the form at once. */
-    createForm: (spec: FormSpecInput & { publish?: boolean }, call: CallOptions = {}) => json<Form>("POST", "/api/v1/forms", { ...call, body: spec }),
+    createForm: (spec: FormSpecInput & { publish?: boolean }, call: CallOptions = {}) => json<Form>("POST", "/api/v1/forms", { signal: call.signal, body: spec }),
     /** GET /api/v1/forms/:id. */
-    getForm: (formId: string, call: CallOptions = {}) => json<Form>("GET", form(formId), call),
+    getForm: (formId: string, call: CallOptions = {}) => json<Form>("GET", form(formId), { signal: call.signal }),
     /** POST /api/v1/forms/:id/questions. On a published form this starts a new draft version. */
     addQuestion: (formId: string, question: QuestionInput, addOptions: { section?: string } & CallOptions = {}) =>
       json<Form>("POST", `${form(formId)}/questions`, { signal: addOptions.signal, body: { question, section: addOptions.section } }),
     /** POST /api/v1/forms/:id/publish. */
-    publishForm: (formId: string, call: CallOptions = {}) => json<Form>("POST", `${form(formId)}/publish`, call),
+    publishForm: (formId: string, call: CallOptions = {}) => json<Form>("POST", `${form(formId)}/publish`, { signal: call.signal }),
     /** GET /api/v1/forms/:id/responses. One page, oldest first. Pass `nextCursor` back as `cursor`. */
     listResponses: (formId: string, query: { limit?: number; cursor?: string } = {}, call: CallOptions = {}) =>
-      json<Page<FormResponse>>("GET", `${form(formId)}/responses`, { ...call, query }),
+      json<Page<FormResponse>>("GET", `${form(formId)}/responses`, { signal: call.signal, query }),
     /** GET /api/v1/forms/:id/export. All responses as CSV text. */
-    exportCsv: async (formId: string, call: CallOptions = {}) => (await send("GET", `${form(formId)}/export`, call)).text(),
+    exportCsv: async (formId: string, call: CallOptions = {}) => {
+      const res = await send("GET", `${form(formId)}/export`, { signal: call.signal });
+      if (!(res.headers.get("content-type") ?? "").startsWith("text/csv")) throw new ApiError(res.status, "bad_response", `GET /export answered ${res.status} with a body that is not CSV`);
+      return res.text();
+    },
     /** POST /api/v1/forms/:id/purge. Deletes the responses past retention in this form. */
-    purge: (formId: string, call: CallOptions = {}) => json<{ purged: number }>("POST", `${form(formId)}/purge`, call),
+    purge: (formId: string, call: CallOptions = {}) => json<{ purged: number }>("POST", `${form(formId)}/purge`, { signal: call.signal }),
     /** DELETE /api/v1/forms/:id. Erases the form, its answers, and its grants. Owner only. */
-    eraseForm: (formId: string, call: CallOptions = {}) => json<{ ok: true; erased: number }>("DELETE", form(formId), call),
+    eraseForm: (formId: string, call: CallOptions = {}) => json<{ ok: true; erased: number }>("DELETE", form(formId), { signal: call.signal }),
     /** POST /api/v1/forms/:id/shares. A person and an agent with one id hold separate roles. */
     share: (formId: string, share: { subject: string; kind: SubjectKind; role: ShareRole }, call: CallOptions = {}) =>
-      json<{ ok: true }>("POST", `${form(formId)}/shares`, { ...call, body: share }),
+      json<{ ok: true }>("POST", `${form(formId)}/shares`, { signal: call.signal, body: share }),
     /** DELETE /api/v1/forms/:id/shares/:subject?kind=. */
     revokeShare: (formId: string, subject: string, kind: SubjectKind, call: CallOptions = {}) =>
-      json<{ ok: true }>("DELETE", `${form(formId)}/shares/${id(subject)}`, { ...call, query: { kind } }),
+      json<{ ok: true }>("DELETE", `${form(formId)}/shares/${id(subject)}`, { signal: call.signal, query: { kind } }),
     /** GET /api/v1/forms/:id/audit. Owner only. */
     listAudit: (formId: string, query: { limit?: number; cursor?: string } = {}, call: CallOptions = {}) =>
-      json<{ entries: AuditEntry[]; nextCursor?: string }>("GET", `${form(formId)}/audit`, { ...call, query }),
+      json<{ entries: AuditEntry[]; nextCursor?: string }>("GET", `${form(formId)}/audit`, { signal: call.signal, query }),
     /** POST /api/v1/purge. Every form at once. Needs the all-forms admin scope. */
-    purgeAll: (call: CallOptions = {}) => json<{ purged: number; rateLimits: number }>("POST", "/api/v1/purge", call),
+    purgeAll: (call: CallOptions = {}) => json<{ purged: number; rateLimits: number }>("POST", "/api/v1/purge", { signal: call.signal }),
     /** POST /api/v1/migrate-grants. Needs the all-forms admin scope. */
-    migrateGrants: (call: CallOptions = {}) => json<{ migrated: number; unresolved: string[] }>("POST", "/api/v1/migrate-grants", call),
+    migrateGrants: (call: CallOptions = {}) => json<{ migrated: number; unresolved: string[] }>("POST", "/api/v1/migrate-grants", { signal: call.signal }),
     /** POST /api/v1/backfill-owners. One page per call: go on while `nextCursor` is set. Needs the all-forms admin scope. */
     backfillOwners: (owner: string, query: { limit?: number; cursor?: string } = {}, call: CallOptions = {}) =>
-      json<BackfillResult>("POST", "/api/v1/backfill-owners", { ...call, body: { owner, ...query } }),
+      json<BackfillResult>("POST", "/api/v1/backfill-owners", { signal: call.signal, body: { owner, ...query } }),
     /** POST /f/:id. The public submit. It sends no token. Pass `consent` only when the respondent agreed to the notice. */
     submit: (formId: string, answers: Answers, submitOptions: { consent?: boolean } & CallOptions = {}) =>
       json<{ ok: true }>("POST", `/f/${id(formId)}`, { signal: submitOptions.signal, auth: false, body: { answers, consent: submitOptions.consent } }),

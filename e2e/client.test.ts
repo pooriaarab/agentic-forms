@@ -128,6 +128,20 @@ describe("the client without a token", () => {
     expect(await caught(createClient({ baseUrl, token: TOKEN, fetch: page }).listForms())).toMatchObject({ name: "ApiError", status: 200, code: "bad_response" });
   });
 
+  test("a cancel while the body is read keeps its own error", async () => {
+    const controller = new AbortController();
+    const half: typeof fetch = async () =>
+      new Response(new ReadableStream({ start: (c) => void controller.signal.addEventListener("abort", () => c.error(controller.signal.reason)) }), { status: 200 });
+    const pending = caught(createClient({ baseUrl, token: TOKEN, fetch: half }).listForms({ signal: controller.signal }));
+    setTimeout(() => controller.abort(), 20);
+    expect(await pending).toMatchObject({ name: "AbortError" });
+  });
+
+  test("a CSV reply that is HTML is an ApiError", async () => {
+    const page: typeof fetch = async () => new Response("<html></html>", { status: 200, headers: { "content-type": "text/html" } });
+    expect(await caught(createClient({ baseUrl, token: TOKEN, fetch: page }).exportCsv("poll"))).toMatchObject({ code: "bad_response" });
+  });
+
   test("a 429 keeps the retry-after seconds", async () => {
     const limited: typeof fetch = async () => new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { "retry-after": "17" } });
     expect(await caught(createClient({ baseUrl, fetch: limited }).submit("poll", {}))).toMatchObject({ status: 429, code: "rate_limited", retryAfter: 17 });
@@ -136,5 +150,7 @@ describe("the client without a token", () => {
   test("a bad base URL or an empty token is refused", () => {
     expect(() => createClient({ baseUrl: "", token: "t" })).toThrow(TypeError);
     expect(() => createClient({ baseUrl, token: "" })).toThrow(TypeError);
+    expect(() => createClient({ baseUrl: "forms.example.com", token: "t" })).toThrow(TypeError);
+    expect(() => createClient({ baseUrl: "https://x.test/?a=1", token: "t" })).toThrow(TypeError);
   });
 });

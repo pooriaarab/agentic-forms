@@ -7,7 +7,7 @@
 
 Build forms and collect answers into tables.
 
-> Status: early release, version 0.3.0. The library, CLI, MCP server, and Worker work. The API can still change before 1.0.
+> Status: early release, version 0.4.0. The library, CLI, MCP server, and Worker work. The API can still change before 1.0.
 
 ## Install
 

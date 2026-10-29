@@ -2,6 +2,18 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.4.0 - 2026-10-29
+
+No breaking changes. The new options and fields are optional.
+
+- Add a web UI for people. The Worker serves it at `/ui/`, and `GET /` goes there. A person signs in with an API token, builds a form, previews it, publishes it, and reads the responses. Every UI action also exists in the SDK, CLI, MCP, and HTTP API. The UI is built from this repo with `npm run build:ui`. The npm package does not include it.
+- Add `PUT /api/v1/forms/<id>`, `ops.update`, `client.updateForm`, the `update` CLI command, and the `update_form` MCP tool. They replace the title, notice, retention, and sections, so you can edit, reorder, or remove questions. An absent `notice` or `retentionDays` is kept. Send `null` to remove one.
+- Add `revision` to a form. It counts every save, including a draft edit. A form made before 0.4.0 reads as revision 0.
+- `update` and `publish` take `expectedRevision`. A write that does not match the stored revision answers 409 `version_conflict` and changes nothing. `update` also takes `expectedVersion`. The CLI has `publish --expected-revision n`.
+- Mark who made each question. `madeBy` is `human` or `agent`. The server sets it from the caller, and an unchanged question keeps its mark. The web UI shows an "Agent" mark. The CLI has a `--by human|agent` flag for local files.
+- Export `formUpdateSchema` from the package.
+- The fill page links `/ui/styles.css` for its look. A deployment without the UI assets gets a 404 for that stylesheet, and the page still works with its own fallback styles.
+
 ## 0.3.0 - 2026-10-29
 
 - Add `agentic-forms/client`, a typed client for the Worker HTTP API. `createClient({ baseUrl, token, fetch? })` has one method per API route and the public submit.

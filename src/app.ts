@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { SubmitError } from "./core/responses.js";
 import { FormError } from "./core/repo.js";
 import { createMemoryStore, type Store } from "agentic-identity";
-import { createRateLimiter } from "./core/rate-limit.js";
+import { clientKey, createRateLimiter } from "./core/rate-limit.js";
 import { OpsError, createOps } from "./ops.js";
 import { renderFillPage } from "./page.js";
 import { VERSION } from "./version.js";
@@ -53,10 +53,11 @@ export function createApp(options: AppOptions = {}) {
   });
 
   app.post("/f/:id", async (c) => {
-    const wait = (await limiter?.hit(c.req.header("cf-connecting-ip") ?? "unknown")) ?? 0;
-    if (wait > 0) return c.json({ error: "rate_limited" }, 429, { "retry-after": String(wait) });
     const id = c.req.param("id");
+    // A read is cheaper than a counter write, so an unknown form never makes a counter.
     if (!(await repo.getPublished(id))) return c.json({ error: "not_found" }, 404);
+    const wait = (await limiter?.hit(clientKey(c.req.header("cf-connecting-ip") ?? "unknown"))) ?? 0;
+    if (wait > 0) return c.json({ error: "rate_limited" }, 429, { "retry-after": String(wait) });
     if (Number(c.req.header("content-length") ?? 0) > MAX_BODY) return c.json({ error: "too_large" }, 413);
     const text = await readCapped(c.req.raw, MAX_BODY);
     if (text === undefined) return c.json({ error: "too_large" }, 413);

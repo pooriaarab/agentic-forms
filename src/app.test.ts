@@ -139,6 +139,12 @@ describe("submit", () => {
     expect((await send("1.1.1.1")).status).toBe(201);
   });
 
+  test("a post to an unknown or unpublished form makes no counter", async () => {
+    const app = createApp({ rateLimitSecret: SECRET, store });
+    expect((await app.request("/f/ghost", { method: "POST", body: "{}" })).status).toBe(404);
+    expect((await store.query("rate_limits")).items).toHaveLength(0);
+  });
+
   test("the app refuses to start without a rate limit secret of 32 bytes, unless the limit is off", () => {
     for (const rateLimitSecret of [undefined, "", "x".repeat(31)]) expect(() => createApp({ store, rateLimitSecret })).toThrow("secret");
     expect(() => createApp({ store, rateLimit: false })).not.toThrow();

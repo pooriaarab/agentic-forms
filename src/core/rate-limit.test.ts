@@ -1,7 +1,7 @@
 // Ways the stored rate limiter can fail, written before the code.
 import { createMemoryStore } from "agentic-identity";
 import { describe, expect, test } from "vitest";
-import { createRateLimiter, purgeRateLimits } from "./rate-limit.js";
+import { clientKey, createRateLimiter, purgeRateLimits } from "./rate-limit.js";
 
 const SECRET = "s".repeat(32);
 
@@ -101,5 +101,20 @@ describe("rate limiter failures", () => {
     await store.put("rate_limits", "nowindow", { start: 900, count: 1 });
     expect(await purgeRateLimits(store, 1000)).toBe(3);
     expect((await store.query("rate_limits")).items.map((i) => i.id)).toEqual(["live"]);
+  });
+});
+
+describe("client keys", () => {
+  test("an IPv6 address counts by its /64, however it is written", () => {
+    const same = ["2001:db8:1:2:aaaa:bbbb:cccc:dddd", "2001:DB8:1:2::1", "2001:0db8:0001:0002:0:0:0:ffff", " 2001:db8:1:2:: "];
+    expect(new Set(same.map(clientKey)).size).toBe(1);
+    expect(clientKey("2001:db8:1:3::1")).not.toBe(clientKey("2001:db8:1:2::1"));
+    expect(clientKey("::1")).toBe("0:0:0:0::/64");
+  });
+
+  test("an IPv4 address and an IPv4-mapped address count the same, and different clients never merge", () => {
+    expect(clientKey("203.0.113.9")).toBe("203.0.113.9");
+    expect(clientKey("::ffff:203.0.113.9")).toBe("203.0.113.9");
+    expect(clientKey("203.0.113.10")).not.toBe(clientKey("::ffff:203.0.113.9"));
   });
 });

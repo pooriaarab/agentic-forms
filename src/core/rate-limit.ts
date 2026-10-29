@@ -13,6 +13,23 @@ const MIN_SECRET_BYTES = 32;
 const isCount = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const isWhole = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
+/**
+ * The key a client counts under. An IPv6 address counts by its /64, because one
+ * subscriber holds a whole /64 and could otherwise make endless counters. An
+ * IPv4-mapped address counts as its IPv4 address.
+ */
+export function clientKey(address: string): string {
+  const text = address.trim().toLowerCase();
+  if (!text.includes(":")) return text;
+  const mapped = /:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(text);
+  if (mapped) return mapped[1]!;
+  const [head = "", tail] = text.split("::");
+  const front = head === "" ? [] : head.split(":");
+  const back = tail === undefined || tail === "" ? [] : tail.split(":");
+  const groups = tail === undefined ? front : [...front, ...Array<string>(Math.max(0, 8 - front.length - back.length)).fill("0"), ...back];
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
 /** A keyed hash, so a stored id cannot be reversed by trying every address. */
 async function keyedHash(secret: string, text: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -60,7 +77,10 @@ export function createRateLimiter(store: Store, config: RateLimitConfig, secret:
  * Deletes counters whose window ended, and counters that are not valid. It
  * reads oldest first, then from the other end for values that sort last.
  */
-export async function purgeRateLimits(store: Store, now: number = Date.now(), budget?: PurgeBudget): Promise<number> {
+/** Counters are cheap to delete and easy to make, so this budget is larger than the default. */
+export const RATE_LIMIT_PURGE_BUDGET: PurgeBudget = { pages: 20, size: 100 };
+
+export async function purgeRateLimits(store: Store, now: number = Date.now(), budget: PurgeBudget = RATE_LIMIT_PURGE_BUDGET): Promise<number> {
   const finished = (doc: Doc) => !validCounter(doc, now) || now - (doc.start as number) >= (doc.windowMs as number);
   return (
     (await purgeOrdered(store, COLLECTION, { orderBy: { field: "start" } }, finished, budget)) +

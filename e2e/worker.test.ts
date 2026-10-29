@@ -113,7 +113,7 @@ describe("durable storage", () => {
       const port = 8820 + i;
       await start(port, TOKEN, { persist, scheduled: true, vars: [`FORMS_RATE_SECRET:${secret}`] });
       expect((await fetch(`http://127.0.0.1:${port}/health`)).status, `secret "${secret}"`).toBe(500);
-      expect((await fetch(`http://127.0.0.1:${port}/__scheduled?cron=17+*+*+*+*`)).status).toBe(200);
+      expect((await fetch(`http://127.0.0.1:${port}/__scheduled?cron=7+*+*+*+*`)).status).toBe(200);
     }
   });
 
@@ -157,7 +157,7 @@ describe("scheduled purge", () => {
     expect(before.items).toHaveLength(1); // the read-time filter already hides them
 
     // Run the job the way the platform does.
-    const run = await fetch(`http://127.0.0.1:${port}/__scheduled?cron=17+*+*+*+*`);
+    const run = await fetch(`http://127.0.0.1:${port}/__scheduled?cron=7+*+*+*+*`);
     expect(run.status).toBe(200);
 
     expect(ids("responses")).toEqual([live]); // gone from storage, not only hidden

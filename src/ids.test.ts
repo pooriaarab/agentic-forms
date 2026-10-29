@@ -27,8 +27,8 @@ const routes: [string, string, unknown?][] = [
   ["GET", "{id}/responses"],
   ["GET", "{id}/export"],
   ["POST", "{id}/purge"],
-  ["POST", "{id}/shares", { subject: "vic", role: "viewer" }],
-  ["DELETE", "{id}/shares/vic"],
+  ["POST", "{id}/shares", { subject: "vic", kind: "human", role: "viewer" }],
+  ["DELETE", "{id}/shares/vic?kind=human"],
   ["GET", "{id}/audit"],
 ];
 const malformed = ["has%20space", "a%2Fb", "x".repeat(101), "__x__", "%00", "a.b", "%F0%9F%98%80", "a%5Cb"];

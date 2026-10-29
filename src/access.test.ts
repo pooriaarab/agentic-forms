@@ -83,8 +83,8 @@ describe("owner and roles", () => {
   test("a viewer reads the form but cannot edit it or see answers; an editor edits and sees answers but cannot share or purge", async () => {
     const [olga, vic, eda] = [await issue(human("olga")), await issue(human("vic")), await issue(human("eda"))];
     await call(olga, "POST", "", { ...spec("a"), publish: true });
-    expect((await call(olga, "POST", "/a/shares", { subject: "vic", role: "viewer" })).status).toBe(200);
-    expect((await call(olga, "POST", "/a/shares", { subject: "eda", role: "editor" })).status).toBe(200);
+    expect((await call(olga, "POST", "/a/shares", { subject: "vic", kind: "human", role: "viewer" })).status).toBe(200);
+    expect((await call(olga, "POST", "/a/shares", { subject: "eda", kind: "human", role: "editor" })).status).toBe(200);
 
     expect((await call(vic, "GET", "/a")).status).toBe(200);
     const q = { question: { id: "m", type: "short_text", label: "M" } };
@@ -97,7 +97,7 @@ describe("owner and roles", () => {
     expect((await call(eda, "GET", "/a/responses")).status).toBe(200);
     expect((await call(eda, "GET", "/a/export")).status).toBe(200);
     expect((await call(eda, "POST", "/a/purge")).status).toBe(403);
-    expect((await call(eda, "POST", "/a/shares", { subject: "sam", role: "viewer" })).status).toBe(403);
+    expect((await call(eda, "POST", "/a/shares", { subject: "sam", kind: "human", role: "viewer" })).status).toBe(403);
     expect((await call(eda, "GET", "/a/audit")).status).toBe(403);
     expect((await call(olga, "POST", "/a/purge")).status).toBe(200);
   });
@@ -105,19 +105,19 @@ describe("owner and roles", () => {
   test("a bad role or subject is 400, and a revoked grant gives 404 again", async () => {
     const [olga, vic] = [await issue(human("olga")), await issue(human("vic"))];
     await call(olga, "POST", "", spec("a"));
-    for (const body of [{ subject: "vic", role: "king" }, { subject: "vic", role: "constructor" }, { subject: "a/b", role: "viewer" }, { role: "viewer" }, { subject: "vic" }]) {
+    for (const body of [{ subject: "vic", kind: "human", role: "king" }, { subject: "vic", kind: "human", role: "constructor" }, { subject: "a/b", role: "viewer" }, { role: "viewer" }, { subject: "vic" }]) {
       expect((await call(olga, "POST", "/a/shares", body)).status, JSON.stringify(body)).toBe(400);
     }
-    await call(olga, "POST", "/a/shares", { subject: "vic", role: "viewer" });
+    await call(olga, "POST", "/a/shares", { subject: "vic", kind: "human", role: "viewer" });
     expect((await call(vic, "GET", "/a")).status).toBe(200);
-    expect((await call(olga, "DELETE", "/a/shares/vic")).status).toBe(200);
+    expect((await call(olga, "DELETE", "/a/shares/vic?kind=human")).status).toBe(200);
     expect((await call(vic, "GET", "/a")).status).toBe(404);
   });
 
   test("the last owner cannot be removed", async () => {
     const olga = await issue(human("olga"));
     await call(olga, "POST", "", spec("a"));
-    expect((await call(olga, "DELETE", "/a/shares/olga")).status).toBe(409);
+    expect((await call(olga, "DELETE", "/a/shares/olga?kind=human")).status).toBe(409);
     expect((await call(olga, "GET", "/a")).status).toBe(200);
   });
 
@@ -126,7 +126,7 @@ describe("owner and roles", () => {
     await call(olga, "POST", "", spec("a"));
     await call(olga, "POST", "", spec("b"));
     await call(sam, "POST", "", spec("c"));
-    await call(olga, "POST", "/b/shares", { subject: "sam", role: "viewer" });
+    await call(olga, "POST", "/b/shares", { subject: "sam", kind: "human", role: "viewer" });
     const names = async (token: string) => ((await (await call(token, "GET", "")).json()) as { forms: { id: string }[] }).forms.map((f) => f.id).sort();
     expect(await names(olga)).toEqual(["a", "b"]);
     expect(await names(sam)).toEqual(["b", "c"]);
@@ -171,7 +171,7 @@ describe("rows from other apps or bad data", () => {
     await createSharing(store).createResource(bob, { id: "x", type: "doc" });
     const token = await issue(bob);
     for (const [method, path] of [["GET", "/x"], ["POST", "/x/purge"], ["GET", "/x/responses"], ["GET", "/x/export"], ["POST", "/x/shares"], ["GET", "/x/audit"]]) {
-      expect((await call(token, method, path, method === "POST" ? { subject: "bob", role: "owner" } : undefined)).status, `${method} ${path}`).toBe(404);
+      expect((await call(token, method, path, method === "POST" ? { subject: "bob", kind: "human", role: "owner" } : undefined)).status, `${method} ${path}`).toBe(404);
     }
   });
 
@@ -179,9 +179,9 @@ describe("rows from other apps or bad data", () => {
     const olga = await issue(human("olga"));
     await call(olga, "POST", "", spec("a"));
     await call(olga, "POST", "", spec("b"));
-    await store.put("grants", "b:olga", { resourceId: "b", subjectId: "olga", role: "king" });
-    await store.put("grants", "ghost:olga", { resourceId: "ghost", subjectId: "olga", role: "owner" });
-    await createSharing(store).createResource(human("olga", ["doc:write"]), { id: "d", type: "doc" });
+    await store.put("grants", "b:human:olga", { resourceId: "b", subjectKind: "human", subjectId: "olga", role: "king" });
+    await store.put("grants", "ghost:human:olga", { resourceId: "ghost", subjectKind: "human", subjectId: "olga", role: "owner" });
+    await createSharing(store).createResource(human("olga", ["*:admin"]), { id: "d", type: "doc" });
     const ids = ((await (await call(olga, "GET", "")).json()) as { forms: { id: string }[] }).forms.map((f) => f.id);
     expect(ids).toEqual(["a"]);
   });
@@ -191,10 +191,10 @@ describe("keeping an owner", () => {
   test("an owner cannot demote the last owner, but can once there is another", async () => {
     const olga = await issue(human("olga"));
     await call(olga, "POST", "", spec("a"));
-    expect((await call(olga, "POST", "/a/shares", { subject: "olga", role: "viewer" })).status).toBe(409);
+    expect((await call(olga, "POST", "/a/shares", { subject: "olga", kind: "human", role: "viewer" })).status).toBe(409);
     expect((await call(olga, "GET", "/a/audit")).status).toBe(200);
-    expect((await call(olga, "POST", "/a/shares", { subject: "sam", role: "owner" })).status).toBe(200);
-    expect((await call(olga, "POST", "/a/shares", { subject: "olga", role: "viewer" })).status).toBe(200);
+    expect((await call(olga, "POST", "/a/shares", { subject: "sam", kind: "human", role: "owner" })).status).toBe(200);
+    expect((await call(olga, "POST", "/a/shares", { subject: "olga", kind: "human", role: "viewer" })).status).toBe(200);
   });
 
   test("a form id taken by an owner row with no form can be made by that owner, and only by that owner", async () => {
@@ -208,7 +208,7 @@ describe("keeping an owner", () => {
   test("only owner, editor, and viewer can be shared", async () => {
     const olga = await issue(human("olga"));
     await call(olga, "POST", "", spec("a"));
-    expect((await call(olga, "POST", "/a/shares", { subject: "sam", role: "commenter" })).status).toBe(400);
+    expect((await call(olga, "POST", "/a/shares", { subject: "sam", kind: "human", role: "commenter" })).status).toBe(400);
   });
 
   test("a caller with an empty chain is 401, and a token over 512 bytes cannot be set", async () => {
@@ -230,7 +230,7 @@ describe("agents act with narrowed rights", () => {
     expect((await call(reader, "GET", "/a/responses")).status).toBe(403);
     expect((await call(writer, "POST", "/a/questions", q)).status).toBe(201);
     expect((await call(writer, "POST", "/a/purge")).status).toBe(403);
-    expect((await call(writer, "POST", "/a/shares", { subject: "bot", role: "owner" })).status).toBe(403);
+    expect((await call(writer, "POST", "/a/shares", { subject: "bot", kind: "human", role: "owner" })).status).toBe(403);
   });
 });
 
@@ -238,7 +238,7 @@ describe("audit and global purge", () => {
   test("reading answers is audited with the caller chain, and only an owner reads the log", async () => {
     const [olga, eda] = [await issue(human("olga")), await issue(human("eda"))];
     await call(olga, "POST", "", { ...spec("a"), publish: true });
-    await call(olga, "POST", "/a/shares", { subject: "eda", role: "editor" });
+    await call(olga, "POST", "/a/shares", { subject: "eda", kind: "human", role: "editor" });
     await call(eda, "GET", "/a/responses");
     await call(eda, "POST", "/a/purge"); // denied, and audited as denied
     const log = ((await (await call(olga, "GET", "/a/audit")).json()) as { entries: { principalId: string; outcome: string; action: string }[] }).entries;
@@ -263,5 +263,58 @@ describe("the public page stays anonymous", () => {
     const send = () => limited.request("/f/a", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "198.51.100.7" }, body: JSON.stringify({ answers: { n: "x" } }) });
     expect([(await send()).status, (await send()).status, (await send()).status]).toEqual([201, 201, 429]);
     expect((await limited.request("/api/v1/forms/a/responses")).status).toBe(401);
+  });
+});
+
+describe("kinds and erase", () => {
+  test("a person and an agent with the same id hold separate roles", async () => {
+    const [olga, ana] = [await issue(human("olga")), await issue(human("ana"))];
+    const bot = await issue({ principalId: "ana", kind: "agent", chain: [{ id: "ana", kind: "agent" }], scopes: ["form:write"] } as PrincipalContext);
+    await call(olga, "POST", "", { ...spec("a"), publish: true });
+    await call(olga, "POST", "/a/shares", { subject: "ana", kind: "agent", role: "editor" });
+    expect((await call(bot, "GET", "/a")).status).toBe(200);
+    expect((await call(ana, "GET", "/a")).status).toBe(404);
+    expect(((await (await call(bot, "GET", "")).json()) as { forms: unknown[] }).forms).toHaveLength(1);
+    expect(((await (await call(ana, "GET", "")).json()) as { forms: unknown[] }).forms).toHaveLength(0);
+    expect((await call(olga, "DELETE", "/a/shares/ana?kind=human")).status).toBe(200); // no such grant, nothing changes
+    expect((await call(bot, "GET", "/a")).status).toBe(200);
+    expect((await call(olga, "DELETE", "/a/shares/ana?kind=agent")).status).toBe(200);
+    expect((await call(bot, "GET", "/a")).status).toBe(404);
+  });
+
+  test("a share needs a kind, and never defaults one", async () => {
+    const olga = await issue(human("olga"));
+    await call(olga, "POST", "", spec("a"));
+    for (const kind of [undefined, "user_token", "robot"]) {
+      expect((await call(olga, "POST", "/a/shares", { subject: "vic", kind, role: "viewer" })).status).toBe(400);
+    }
+    expect((await call(olga, "DELETE", "/a/shares/vic")).status).toBe(400);
+  });
+
+  test("deleting a form erases its answers, versions, grants, and resource", async () => {
+    const [olga, eda] = [await issue(human("olga")), await issue(human("eda"))];
+    await call(olga, "POST", "", { ...spec("a"), publish: true });
+    await call(olga, "POST", "/a/shares", { subject: "eda", kind: "human", role: "editor" });
+    await store.put("responses", "r1", { id: "r1", formId: "a", submittedAt: "2026-01-01T00:00:00.000Z" } as never);
+    expect((await call(eda, "DELETE", "/a")).status).toBe(403);
+    const deleted = await call(olga, "DELETE", "/a");
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({ ok: true, erased: 1 });
+    expect((await call(olga, "GET", "/a")).status).toBe(404);
+    for (const collection of ["forms", "form_versions", "responses", "grants", "resources"]) {
+      expect((await store.query(collection)).items, collection).toHaveLength(0);
+    }
+    // the id is free again
+    expect((await call(olga, "POST", "", spec("a"))).status).toBe(201);
+  });
+
+  test("a delete that identity would refuse destroys nothing", async () => {
+    const olga = await issue(human("olga"));
+    await call(olga, "POST", "", { ...spec("a"), publish: true });
+    await store.put("responses", "r1", { id: "r1", formId: "a", submittedAt: "2026-01-01T00:00:00.000Z" } as never);
+    await createSharing(store).createResource(human("olga", ["*:admin"]), { type: "doc", parentId: "a" });
+    expect((await call(olga, "DELETE", "/a")).status).toBe(409);
+    expect(await store.get("responses", "r1")).not.toBeNull();
+    expect((await call(olga, "GET", "/a")).status).toBe(200);
   });
 });

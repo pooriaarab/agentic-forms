@@ -152,7 +152,7 @@ describe("durable storage", () => {
     expect((await send(8807)).status).toBe(429); // the counter was kept in D1
     const audit = await fetch("http://127.0.0.1:8807/api/v1/forms/limit/audit", { headers });
     expect(audit.status).toBe(200);
-    expect((await fetch("http://127.0.0.1:8807/api/v1/forms/limit/shares", { method: "POST", headers, body: JSON.stringify({ subject: "vic", role: "viewer" }) })).status).toBe(200);
+    expect((await fetch("http://127.0.0.1:8807/api/v1/forms/limit/shares", { method: "POST", headers, body: JSON.stringify({ subject: "vic", kind: "human", role: "viewer" }) })).status).toBe(200);
     expect((await fetch("http://127.0.0.1:8807/api/v1/forms/limit", { headers: { authorization: "Bearer wrong" } })).status).toBe(401);
   });
 

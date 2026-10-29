@@ -18,9 +18,9 @@ describe("owner backfill", () => {
     await legacy(store, "a");
     await legacy(store, "b");
     expect(await backfillOwners(store, "olga")).toEqual({ created: ["a", "b"], skipped: 0, conflicts: [], invalid: [] });
-    expect(await grants(store)).toEqual(["a:olga", "b:olga"]);
+    expect(await grants(store)).toEqual(["a:human:olga", "b:human:olga"]);
     expect((await store.get("resources", "a"))?.type).toBe("form");
-    expect((await store.get("grants", "a:olga"))?.role).toBe("owner");
+    expect((await store.get("grants", "a:human:olga"))?.role).toBe("owner");
   });
 
   test("a second run changes nothing", async () => {
@@ -39,7 +39,7 @@ describe("owner backfill", () => {
     await createSharing(store).createResource(human("sam"), { id: "mine", type: "form" });
     await legacy(store, "old");
     expect(await backfillOwners(store, "olga")).toEqual({ created: ["old"], skipped: 1, conflicts: [], invalid: [] });
-    expect(await grants(store)).toEqual(["mine:sam", "old:olga"]);
+    expect(await grants(store)).toEqual(["mine:human:sam", "old:human:olga"]);
   });
 
   test("a form id held by a resource of another type is a conflict and is left alone", async () => {
@@ -47,7 +47,7 @@ describe("owner backfill", () => {
     await legacy(store, "x");
     await createSharing(store).createResource(human("bob", ["doc:write"]), { id: "x", type: "doc" });
     expect(await backfillOwners(store, "olga")).toEqual({ created: [], skipped: 0, conflicts: ["x"], invalid: [] });
-    expect(await grants(store)).toEqual(["x:bob"]);
+    expect(await grants(store)).toEqual(["x:human:bob"]);
   });
 
   test("two runs at the same moment make one owner row per form", async () => {
@@ -55,7 +55,7 @@ describe("owner backfill", () => {
     for (const id of ["a", "b", "c"]) await legacy(store, id);
     const [one, two] = await Promise.all([backfillOwners(store, "olga"), backfillOwners(store, "olga")]);
     expect(one.created.length + two.created.length).toBe(3);
-    expect(await grants(store)).toEqual(["a:olga", "b:olga", "c:olga"]);
+    expect(await grants(store)).toEqual(["a:human:olga", "b:human:olga", "c:human:olga"]);
   });
 
   test("a run stops at the limit, and the next run goes on from its cursor", async () => {
@@ -64,7 +64,7 @@ describe("owner backfill", () => {
     const first = await backfillOwners(store, "olga", { limit: 2 });
     expect(first.created).toEqual(["a", "b"]);
     expect(first.nextCursor).toBeTypeOf("string");
-    expect(await grants(store)).toEqual(["a:olga", "b:olga"]);
+    expect(await grants(store)).toEqual(["a:human:olga", "b:human:olga"]);
     const second = await backfillOwners(store, "olga", { limit: 2, cursor: first.nextCursor });
     expect(second.created).toEqual(["c", "d"]);
     const third = await backfillOwners(store, "olga", { limit: 2, cursor: second.nextCursor });
@@ -77,7 +77,7 @@ describe("owner backfill", () => {
     for (const id of ["a", "my.form", "Umfrage 2025", "z"]) await legacy(store, id);
     const result = await backfillOwners(store, "olga");
     expect(result).toEqual({ created: ["a", "z"], skipped: 0, conflicts: [], invalid: ["Umfrage 2025", "my.form"] });
-    expect(await grants(store)).toEqual(["a:olga", "z:olga"]);
+    expect(await grants(store)).toEqual(["a:human:olga", "z:human:olga"]);
   });
 
   test("a bad limit or cursor is refused and nothing is written", async () => {

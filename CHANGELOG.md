@@ -4,7 +4,9 @@ This file lists what changed in each release. The versions follow semver. The AP
 
 ## 0.7.0 - 2026-10-29
 
-No breaking changes. The new commands and tools are optional.
+Breaking change for code that composes the schemas. Read it before you upgrade. The new commands and tools are optional.
+
+- Breaking: `formSpecSchema`, `formUpdateSchema`, and `questionSchema` are zod 4 schemas now, not zod 3. Code that builds on them with zod 3 (for example `.extend` or `.shape` from your own zod 3 import) must move to zod 4. The text of a validation error can also read differently.
 
 ### Added
 
@@ -14,7 +16,7 @@ No breaking changes. The new commands and tools are optional.
 ### Changed
 
 - Move to `agentic-identity` 0.7.x and `agentic-design` 0.3.x. The package depends on these ranges now. The code needed no change.
-- Raise `zod` to 4.6.6. Versions below 4.6.6 can run out of memory while they validate an oversized constrained collection (GHSA-mrhx-c7xc-m3w5). An npm override makes `agentic-design` use zod 4.6.6 too. The answers schema names the key type of its record, so the behavior does not change.
+- Raise `zod` to 4.6.6 in this package. Versions below 4.6.6 can run out of memory while they validate an oversized constrained collection (GHSA-mrhx-c7xc-m3w5). The `overrides` entry of this repo does not reach a dependency. This release uses `agentic-design` 0.3.2, which asks for zod 3, so an install of `agentic-forms` still has a zod 3 copy under `agentic-design`. `agentic-design` 0.3.3 asks for zod 4. Add an `overrides` entry in your project, or wait for this package to move its `agentic-design` range.
 - The publish workflow runs one publish at a time for each ref. A second run waits for the first one to finish. This does not change the package.
 
 ## 0.6.0 - 2026-10-29

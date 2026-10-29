@@ -78,9 +78,9 @@ const collect = async (store: Store, collection: string, where: Record<string, s
 async function formGrants(store: Store, subject: Subject) {
   const out: { id: string; resourceId: string; role: unknown; data: JsonRecord }[] = [];
   for await (const { id, data } of docs(store, "grants", { subjectId: subject.id })) {
-    if (!(SUBJECT_KINDS as readonly unknown[]).includes(data.subjectKind)) throw new FormsAccountError("invalid_input", `a grant has no valid kind: run migrateGrants first (grant ${id})`);
+    if (!(SUBJECT_KINDS as readonly unknown[]).includes(data.subjectKind)) throw new FormsAccountError("invalid_input", `a grant has no valid kind: run migrateGrants first`);
     if (data.subjectKind !== subject.kind) continue;
-    if (typeof data.resourceId !== "string") throw new FormsAccountError("invalid_input", `a grant has no resource id (grant ${id})`);
+    if (typeof data.resourceId !== "string") throw new FormsAccountError("invalid_input", `a grant has no resource id`);
     if ((await store.get("resources", data.resourceId))?.type !== "form") continue;
     out.push({ id, resourceId: data.resourceId, role: data.role, data: data as JsonRecord });
   }
@@ -112,7 +112,7 @@ export const formsAccount: FormsAccount = {
   async exportAccount(subject, deps) {
     const store = check(subject, deps);
     const grants = await formGrants(store, subject);
-    const owned = grants.filter((g) => g.role === "owner").map((g) => g.resourceId);
+    const owned = [...new Set(grants.filter((g) => g.role === "owner").map((g) => g.resourceId))];
     const forms: JsonRecord[] = [];
     const versions: JsonRecord[] = [];
     const responses: JsonRecord[] = [];

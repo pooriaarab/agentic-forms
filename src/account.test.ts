@@ -220,4 +220,15 @@ describe("eraseAccount", () => {
     await store.put("audit", "odd", { id: "odd", rootId: "ana", resourceId: "bob-form", chain: [{ id: "bob", kind: "human" }] });
     expect((await formsAccount.exportAccount(ANA, { store })).audit).toEqual([]);
   });
+
+  it("exports a form once when the subject holds two owner grants, and names no grant id in an error", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    await store.put("grants", "ana-form:zz", { resourceId: "ana-form", subjectKind: "human", subjectId: "ana", role: "owner" });
+    expect((await formsAccount.exportAccount(ANA, { store })).forms).toHaveLength(1);
+    await store.put("grants", "ana-form:ana", { resourceId: "ana-form", subjectId: "ana", role: "viewer" });
+    const error = await formsAccount.exportAccount(ANA, { store }).catch((e: Error) => e);
+    expect((error as Error).message).not.toContain("ana-form:ana");
+    expect((error as Error).message).toMatch(/migrateGrants/);
+  });
 });

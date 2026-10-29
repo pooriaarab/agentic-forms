@@ -1,7 +1,7 @@
 import { createD1Store, D1_SCHEMA, type D1Like } from "agentic-identity/cloudflare";
 import { createStoreAuth, parseRegion, type Store } from "agentic-identity";
 import { createApp } from "./app.js";
-import { createTokenAuth, firstAuth } from "./core/token-auth.js";
+import { bearerOnly, createTokenAuth, firstAuth } from "./core/token-auth.js";
 import { createOps } from "./ops.js";
 
 export interface WorkerEnv {
@@ -31,8 +31,10 @@ async function openStore(env: WorkerEnv) {
 }
 
 // Credentials live in the store, so they survive a restart. The shared token, when set, still works as the bootstrap.
-const durableAuth = (store: Store, env: WorkerEnv) =>
-  env.FORMS_API_TOKEN === undefined ? createStoreAuth(store) : firstAuth(createStoreAuth(store), createTokenAuth(env.FORMS_API_TOKEN));
+const durableAuth = (store: Store, env: WorkerEnv) => {
+  if (env.FORMS_API_TOKEN === undefined) console.warn("FORMS_API_TOKEN is not set: only credentials kept in the store can call /api/v1.");
+  return env.FORMS_API_TOKEN === undefined ? bearerOnly(createStoreAuth(store)) : firstAuth(createTokenAuth(env.FORMS_API_TOKEN), bearerOnly(createStoreAuth(store)));
+};
 
 const forget = <T>(work: Promise<T>, reset: () => void) =>
   work.catch((error: unknown) => {

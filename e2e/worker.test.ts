@@ -97,10 +97,13 @@ describe("secret failures", () => {
     expect((await fetch("http://127.0.0.1:8809/api/v1/forms", { method: "POST", headers, body: JSON.stringify(open) })).status).toBe(201);
     await stop(first);
 
-    await start(8812, undefined, { persist });
+    await start(8812, TOKEN, { persist }); // the shared token and the stored credential work side by side
     const list = await (await fetch("http://127.0.0.1:8812/api/v1/forms", { headers })).json();
     expect(list.forms.map((f: { id: string }) => f.id)).toEqual(["durable"]);
+    expect((await fetch("http://127.0.0.1:8812/api/v1/forms", { headers })).status).toBe(200);
+    expect((await fetch("http://127.0.0.1:8812/api/v1/forms", { headers: auth })).status).toBe(200);
     expect((await fetch("http://127.0.0.1:8812/api/v1/forms", { headers: { authorization: "Bearer aid_wrong" } })).status).toBe(401);
+    expect((await fetch("http://127.0.0.1:8812/api/v1/forms", { headers: { cookie: `session=${token}` } })).status).toBe(401);
   });
 
   test("a token under 32 bytes makes the Worker refuse to serve", async () => {

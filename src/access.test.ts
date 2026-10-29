@@ -137,7 +137,7 @@ describe("credentials kept in the store", () => {
   test("a credential from issueCredential names the caller, and a revoked or unknown one does not", async () => {
     const durable = createApp({ store, auth: createStoreAuth(store), rateLimitSecret: SECRET });
     await store.put("principals", "ada", { id: "ada", kind: "human", scopes: ["*:admin"] });
-    const token = await issueCredential(store, { principalId: "ada", kind: "session" } as never);
+    const token = await issueCredential(store, { principalId: "ada", kind: "session" });
     const send = (bearer: string, method = "GET", body?: unknown) =>
       durable.request("/api/v1/forms", { method, headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
     expect((await send(token, "POST", spec("a"))).status).toBe(201);
@@ -145,6 +145,19 @@ describe("credentials kept in the store", () => {
     expect((await send("aid_unknown")).status).toBe(401);
     await store.put("credentials", (await store.query("credentials")).items[0]!.id, { principalId: "ada", kind: "session", revokedAt: 1 });
     expect((await send(token)).status).toBe(401);
+  });
+});
+
+describe("the list", () => {
+  test("an agent with no form scope sees no forms, and a stranger's list writes no audit row", async () => {
+    const olga = await issue(human("olga"));
+    await call(olga, "POST", "", spec("a"));
+    const writer = await issue(agentOf("olga", "bot", ["doc:read"]));
+    expect(((await (await call(writer, "GET", "")).json()) as { forms: unknown[] }).forms).toEqual([]);
+    const stranger = await issue(human("sam"));
+    const before = (await store.query("audit")).items.length;
+    expect(((await (await call(stranger, "GET", "")).json()) as { forms: unknown[] }).forms).toEqual([]);
+    expect((await store.query("audit")).items.length).toBe(before);
   });
 });
 

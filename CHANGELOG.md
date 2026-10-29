@@ -17,7 +17,7 @@ Breaking changes. Read these before you upgrade from 0.1.0:
 
 - Breaking: a share names a `kind`, `human` or `agent`. A person and an agent with the same id hold separate roles. `POST /api/v1/forms/<id>/shares` needs `kind`, and `DELETE /api/v1/forms/<id>/shares/<subject>` needs `?kind=human|agent`.
 - Breaking: grants made before kinds are not honored. Run `POST /api/v1/migrate-grants` right after you deploy, and read `unresolved` in its answer.
-- Breaking: `GET /api/v1/forms/<id>/audit` returns one page of `entries` and a `nextCursor`, not the whole list. It takes `limit` and `cursor`. Follow `nextCursor` to read all rows.
+- Breaking: `GET /api/v1/forms/<id>/audit` returns one page of `entries` and a `nextCursor`, not the whole list. It takes `limit` and `cursor`. Follow `nextCursor` to read all rows. A `limit` that is not a whole number from 1 to 200, or a cursor that is not valid, answers 400 `invalid_query`.
 - Breaking: with no token and no stored credential, `/api/v1` answers 401, not 503.
 - Breaking: the responses list answers 400 for a `limit` that is not a whole number from 1 to 1000, and for a cursor that is not valid.
 - Breaking: a form id of the form `__name__` is refused at create, because the store keeps these ids.

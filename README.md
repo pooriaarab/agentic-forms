@@ -198,7 +198,7 @@ the token. The share link of a form points at `baseUrl`. The pages follow the ad
 ## Features
 
 - Ten question types: short text, long text, number, email, single choice,
-  multi choice, dropdown, date, rating, and `file` (the fill page does not show it).
+  multi choice, dropdown, date, rating, and file (a stored reference that the fill page does not show).
 - Required flags, length, pattern, and range rules.
 - Sections and conditions: show a question or a section when an earlier answer matches.
 - Form checks: a logic cycle, logic that reads a later or deleted question,

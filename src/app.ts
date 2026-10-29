@@ -13,6 +13,18 @@ import { VERSION } from "./version.js";
 const MAX_BODY = 65_536;
 const SUBJECT = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_LIMIT = 1000;
+
+/** A cursor is base64url of JSON [value, id]. Stores differ in what they do with a crafted one, so check the shape here. */
+function wellFormedCursor(cursor: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(atob(cursor.replace(/-/g, "+").replace(/_/g, "/")));
+    if (!Array.isArray(parsed) || parsed.length !== 2) return false;
+    const [value, id] = parsed;
+    return typeof id === "string" && (value === null || ["string", "number", "boolean"].includes(typeof value));
+  } catch {
+    return false;
+  }
+}
 const SHARE_ROLES: readonly Role[] = ["owner", "editor", "viewer"];
 
 /** The caller may not do this. A caller with no role on the form gets 404, so a form id never leaks. */
@@ -173,12 +185,9 @@ export function createApp(options: AppOptions = {}) {
     if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT)) {
       return c.json({ error: "invalid_query", message: `limit is a whole number from 1 to ${MAX_LIMIT}` }, 400);
     }
-    try {
-      return c.json(await ops.listResponses(c.req.param("id"), { limit, cursor: c.req.query("cursor") }));
-    } catch (error) {
-      if (error instanceof Error && error.message === "invalid cursor") return c.json({ error: "invalid_query", message: "the cursor is not valid" }, 400);
-      throw error;
-    }
+    const cursor = c.req.query("cursor");
+    if (cursor !== undefined && !wellFormedCursor(cursor)) return c.json({ error: "invalid_query", message: "the cursor is not valid" }, 400);
+    return c.json(await ops.listResponses(c.req.param("id"), { limit, cursor }));
   });
   app.get(`${forms}/:id/export`, async (c) => {
     await require(c, "write", c.req.param("id"));

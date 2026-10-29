@@ -57,6 +57,18 @@ describe("a malformed form id is 400", () => {
   });
 });
 
+describe("the id check comes after the access check", () => {
+  test("a caller with no role on the form gets 404 for a bad subject, not 400", async () => {
+    const memory = createMemoryAuth();
+    const stranger = await memory.issue({ ...root, principalId: "sam", chain: [{ id: "sam", kind: "human" }] });
+    const own = createApp({ store: createMemoryStore(), auth: memory.auth, rateLimitSecret: SECRET });
+    const owner = await memory.issue(root);
+    await own.request("/api/v1/forms", { method: "POST", headers: { authorization: `Bearer ${owner}`, "content-type": "application/json" }, body: JSON.stringify(spec) });
+    const res = await own.request("/api/v1/forms/real/shares/has%20space", { method: "DELETE", headers: { authorization: `Bearer ${stranger}` } });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("a form that is not there is 404", () => {
   for (const [method, path, body] of routes) {
     test(`${method} /api/v1/forms/${path}`, async () => {
@@ -72,11 +84,21 @@ describe("a form that is not there is 404", () => {
 });
 
 describe("a bad query is 400", () => {
-  test("a limit that is not a number, and a cursor that was never issued", async () => {
-    for (const query of ["limit=abc", "limit=-1", "limit=0", "limit=1e9", "cursor=%00", "cursor=garbage"]) {
-      const res = await api("GET", `real/responses?${query}`);
-      expect(res.status, query).toBe(400);
-    }
+  const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  test("a limit that is not a whole number from 1 to 1000, and a cursor that was never issued", async () => {
+    const bad = ["limit=abc", "limit=-1", "limit=0", "limit=1.5", "limit=1001", "limit=1e9", "limit=", "cursor=%00", "cursor=garbage", `cursor=${b64([{ a: 1 }, "x"])}`, `cursor=${b64(["x", 5])}`, `cursor=${b64("x")}`, `cursor=${b64([1])}`];
+    for (const query of bad) expect((await api("GET", `real/responses?${query}`)).status, query).toBe(400);
+  });
+
+  test("the edges are accepted, and a page with a limit gives a cursor that works", async () => {
+    for (const n of ["x", "y", "z"]) await app.request("/f/real", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: { n } }) });
+    expect((await api("GET", "real/responses?limit=1000")).status).toBe(200);
+    const first = (await (await api("GET", "real/responses?limit=1")).json()) as { items: unknown[]; nextCursor?: string };
+    expect(first.items).toHaveLength(1);
+    expect(first.nextCursor).toBeTypeOf("string");
+    const next = await api("GET", `real/responses?limit=1&cursor=${first.nextCursor}`);
+    expect(next.status).toBe(200);
+    expect(((await next.json()) as { items: unknown[] }).items).toHaveLength(1);
   });
 });
 

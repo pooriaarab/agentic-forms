@@ -66,6 +66,8 @@ export type Answers = Record<string, AnswerValue>;
 export type Issue = { code: string; message: string; question?: string };
 
 const CHOICE_TYPES: QuestionType[] = ["single_choice", "multi_choice", "dropdown"];
+const QUESTION_TYPES: QuestionType[] = ["short_text", "long_text", "number", "email", "single_choice", "multi_choice", "dropdown", "date", "rating", "file"];
+const CONDITION_OPS: Condition["op"][] = ["equals", "not_equals", "contains", "gt", "lt", "answered"];
 const TEXT_CAP: Partial<Record<QuestionType, number>> = { short_text: 1000, long_text: 20000 };
 const PATTERN_CAP = 256;
 /** A text answer longer than this is refused before any pattern runs. */
@@ -156,6 +158,10 @@ export function validateForm(form: Form): Issue[] {
     const list = edges.get(from) ?? [];
     edges.set(from, list);
     if (!cond) return;
+    if (!CONDITION_OPS.includes(cond.op)) {
+      add("bad_condition", `unknown logic "${String(cond.op)}"`, label);
+      return;
+    }
     if (cond.op !== "answered" && cond.value === undefined) {
       add("bad_condition", `logic "${cond.op}" needs a value`, label);
     } else if ((cond.op === "gt" || cond.op === "lt") && typeof cond.value !== "number") {
@@ -217,6 +223,10 @@ export function validateForPublish(form: Form): Issue[] {
 }
 
 function checkQuestion(q: Question, add: (code: string, message: string, question?: string) => void): void {
+  if (!QUESTION_TYPES.includes(q.type)) {
+    add("bad_type", `unknown question type "${String(q.type)}"`, q.id);
+    return;
+  }
   if (CHOICE_TYPES.includes(q.type)) {
     const choices = q.choices ?? [];
     if (choices.length === 0 || new Set(choices).size !== choices.length) {
@@ -233,11 +243,14 @@ function checkQuestion(q: Question, add: (code: string, message: string, questio
     if (r[key] !== undefined && !Number.isFinite(r[key])) bad(`${key} must be a number`);
   }
   if (r.min !== undefined && r.max !== undefined && r.min > r.max) bad("min is above max");
+  if (r.minLength !== undefined && r.maxLength !== undefined && r.minLength > r.maxLength) bad("minLength is above maxLength");
   if (q.type === "rating") {
     const min = r.min ?? 1;
     const max = r.max ?? 5;
     if (!Number.isInteger(min) || !Number.isInteger(max) || max - min + 1 > RATING_SPAN_CAP) {
       bad(`a rating needs whole numbers that span ${RATING_SPAN_CAP} steps or fewer`);
+    } else if (min > max && (r.min === undefined || r.max === undefined)) {
+      bad("min is above max");
     }
   }
   if (r.pattern !== undefined) {
@@ -324,5 +337,7 @@ function checkAnswer(q: Question, value: AnswerValue, add: (code: string, messag
     case "file":
       if (typeof value !== "string" || value === "" || value.length > 256) wrong();
       return;
+    default:
+      return wrong();
   }
 }

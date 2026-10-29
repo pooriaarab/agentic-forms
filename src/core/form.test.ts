@@ -1,7 +1,7 @@
 // Written before the code. Each test names one way the logic or the
 // validation can fail.
 import { describe, expect, test } from "vitest";
-import { validateAnswers, validateForm, visibleQuestions, type Form, type Question } from "./form.js";
+import { validateAnswers, validateForm, visibleQuestions, type Condition, type Form, type Question } from "./form.js";
 
 const q = (id: string, extra: Partial<Question> = {}): Question => ({
   id,
@@ -213,6 +213,23 @@ describe("hostile rules and inputs", () => {
     expect(codes(f)).toEqual(["bad_condition"]);
     const g = form([q("a"), q("b", { showIf: { question: "a", op: "gt", value: "5" } })]);
     expect(codes(g)).toEqual(["bad_condition"]);
+  });
+
+  test("an unknown question type or logic op is refused", () => {
+    expect(codes(form([q("a", { type: "numbr" as Question["type"] })]))).toEqual(["bad_type"]);
+    const f = form([q("a"), q("b", { showIf: { question: "a", op: "eqals" as Condition["op"], value: "x" } })]);
+    expect(codes(f)).toEqual(["bad_condition"]);
+  });
+
+  test("an unknown question type accepts no answer", () => {
+    const f = form([q("a", { type: "numbr" as Question["type"] })]);
+    expect(validateAnswers(f, { a: "anything" }).ok).toBe(false);
+  });
+
+  test("rules that no answer can satisfy are refused", () => {
+    expect(codes(form([q("r", { type: "rating", rules: { min: 10 } })]))).toEqual(["bad_rule"]);
+    expect(codes(form([q("r", { type: "rating", rules: { max: 0 } })]))).toEqual(["bad_rule"]);
+    expect(codes(form([q("t", { rules: { minLength: 5, maxLength: 2 } })]))).toEqual(["bad_rule"]);
   });
 
   test("a required text with only spaces counts as empty", () => {

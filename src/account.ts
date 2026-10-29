@@ -31,7 +31,7 @@ export interface FormsAccount {
   /**
    * Erases each form that the subject is the only owner of, with its snapshots, answers, grants, and audit entries. A form with
    * another owner stays: only the subject's grant goes, as do the grants the subject holds on forms of others. Last, the audit
-   * entries rooted in the subject go. Counts by the collection names. Run it with writes stopped. A repeat finds nothing and counts zero.
+   * entries rooted in the subject go. Counts by the collection names. The `audit` count can miss an entry written while the erase runs. Run it with writes stopped. A repeat finds nothing and counts zero.
    * A failure names the form id. A stop before the resource row goes is finished by a repeat, and the counts of the runs add up. A stop after it leaves nothing to find, and the counts of forms, grants, and audit entries for that form may be missing from the error message. Entries on a resource that is already gone are not matched and stay.
    * A grant with no valid kind stops both calls: run `migrateGrants` first. An audit entry with no known root kind, or on a resource that is not a form, is left alone. Invites and links record only the id of their maker, with no kind, so they are not matched to a subject: they leave with their form.
    */
@@ -42,11 +42,18 @@ export interface FormsAccount {
 const plain = (value: unknown): JsonRecord[] => JSON.parse(JSON.stringify(value)) as JsonRecord[];
 
 function check(subject: Subject, deps: FormsAccountDeps): Store {
-  if (typeof deps?.store?.query !== "function" || typeof deps.store.delete !== "function") throw new FormsAccountError("invalid_input", "formsAccount needs deps.store");
+  if ((["get", "query", "put", "delete", "transaction"] as const).some((name) => typeof deps?.store?.[name] !== "function")) throw new FormsAccountError("invalid_input", "formsAccount needs deps.store");
   if (typeof subject?.id !== "string" || subject.id.trim() === "" || !(SUBJECT_KINDS as readonly unknown[]).includes(subject.kind)) {
     throw new FormsAccountError("invalid_input", "subject needs an id and a kind of human or agent");
   }
   return deps.store;
+}
+
+/** True when the form has one owner. An owner with no valid kind cannot be told from the subject: it stops the erase rather than guess. */
+async function soleOwner(store: Store, formId: string): Promise<boolean> {
+  const owners = (await store.query("grants", { where: { resourceId: formId, role: "owner" }, limit: MAX_OWNERS_ON_ERASE + 1 })).items;
+  if (owners.some((o) => !(SUBJECT_KINDS as readonly unknown[]).includes(o.data.subjectKind))) throw new Error("an owner grant has no valid kind");
+  return owners.length === 1;
 }
 
 async function* docs(store: Store, collection: string, where: Record<string, string>) {
@@ -131,10 +138,8 @@ export const formsAccount: FormsAccount = {
     for (const grant of await formGrants(store, subject)) {
       const formId = grant.resourceId;
       try {
-        const owners = (await store.query("grants", { where: { resourceId: formId, role: "owner" }, limit: MAX_OWNERS_ON_ERASE + 1 })).items;
-        // An owner with no valid kind cannot be told from the subject: keep the form rather than guess.
-        if (owners.some((o) => !(SUBJECT_KINDS as readonly unknown[]).includes(o.data.subjectKind))) throw new Error("an owner grant has no valid kind");
-        if (grant.role === "owner" && owners.length === 1) {
+        const sole = grant.role === "owner" && (await soleOwner(store, formId));
+        if (sole) {
           if ((await store.query("resources", { where: { parentId: formId }, limit: 1 })).items.length > 0) throw new Error("the form has child resources");
           const others = (await collect(store, "grants", { resourceId: formId })).length;
           const trail = (await collect(store, "audit", { resourceId: formId })).length;

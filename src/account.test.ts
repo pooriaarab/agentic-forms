@@ -183,4 +183,13 @@ describe("eraseAccount", () => {
     expect((await formsAccount.exportAccount(ANA, { store })).audit.map((a) => a.id)).not.toContain("bot-agent");
     expect((await formsAccount.exportAccount({ id: "ana", kind: "agent" }, { store })).audit.map((a) => a.id)).toEqual(["bot-agent"]);
   });
+
+  it("drops an editor grant even when another owner of that form has no kind", async () => {
+    const store = createMemoryStore();
+    await make(store, "bob-form", ctx("bob"));
+    await createSharing(store).grant(ctx("bob"), "bob-form", { kind: "human", id: "ana" }, "editor");
+    await store.put("grants", "bob-form:legacy", { resourceId: "bob-form", subjectId: "zed", role: "owner" });
+    expect(await formsAccount.eraseAccount(ANA, { store })).toMatchObject({ forms: 0, grants: 1 });
+    expect(await store.get("grants", "bob-form:human:ana")).toBeNull();
+  });
 });

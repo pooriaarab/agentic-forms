@@ -231,4 +231,17 @@ describe("eraseAccount", () => {
     expect((error as Error).message).not.toContain("ana-form:ana");
     expect((error as Error).message).toMatch(/migrateGrants/);
   });
+
+  it("erases a form whose only owner holds two owner grants, and stops before any grant goes when the standard one is missing", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    await store.put("grants", "ana-form:zz", { resourceId: "ana-form", subjectKind: "human", subjectId: "ana", role: "owner" });
+    await make(store, "odd-form", ctx("ana"));
+    await store.delete("grants", "odd-form:human:ana");
+    await store.put("grants", "odd-form:old", { resourceId: "odd-form", subjectKind: "human", subjectId: "ana", role: "owner" });
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form odd-form/);
+    expect(await store.get("grants", "odd-form:old")).not.toBeNull();
+    expect(await store.get("forms", "odd-form")).not.toBeNull();
+    expect(await store.get("forms", "ana-form")).toBeNull();
+  });
 });

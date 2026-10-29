@@ -49,11 +49,11 @@ function check(subject: Subject, deps: FormsAccountDeps): Store {
   return deps.store;
 }
 
-/** True when the form has one owner. An owner with no valid kind cannot be told from the subject: it stops the erase rather than guess. */
-async function soleOwner(store: Store, formId: string): Promise<boolean> {
+/** True when no owner of the form is someone else. An owner with no valid kind cannot be told from the subject: it stops the erase rather than guess. */
+async function noOtherOwner(store: Store, formId: string, subject: Subject): Promise<boolean> {
   const owners = (await store.query("grants", { where: { resourceId: formId, role: "owner" }, limit: MAX_OWNERS_ON_ERASE + 1 })).items;
   if (owners.some((o) => !(SUBJECT_KINDS as readonly unknown[]).includes(o.data.subjectKind))) throw new Error("an owner grant has no valid kind");
-  return owners.length === 1;
+  return owners.every((o) => o.data.subjectKind === subject.kind && o.data.subjectId === subject.id);
 }
 
 async function* docs(store: Store, collection: string, where: Record<string, string>) {
@@ -136,18 +136,16 @@ export const formsAccount: FormsAccount = {
     const ctx: PrincipalContext = { principalId: subject.id, kind: subject.kind, chain: [{ id: subject.id, kind: subject.kind }], scopes: ["form:admin"] };
     const sharing = createSharing(store);
     const ops = createOps(store);
-    const erased = new Set<string>();
-    for (const grant of await formGrants(store, subject)) {
-      const formId = grant.resourceId;
-      // A second grant of the subject on a form that went already is gone with it, and is not counted again.
-      if (erased.has(formId)) continue;
+    // One pass per form: the subject may hold more than one grant on it, and the owner check is about the subject, not a grant.
+    const byForm = new Map<string, Awaited<ReturnType<typeof formGrants>>>();
+    for (const grant of await formGrants(store, subject)) byForm.set(grant.resourceId, [...(byForm.get(grant.resourceId) ?? []), grant]);
+    for (const [formId, mine] of byForm) {
       try {
-        const sole = grant.role === "owner" && (await soleOwner(store, formId));
-        if (sole) {
-          // Sharing finds an owner only under the standard key. A grant under another key would pass the data erase and then be refused.
-          if (grant.id !== `${formId}:${subject.kind}:${subject.id}`) throw new Error("the owner grant has a key that sharing does not honor");
+        if (mine.some((g) => g.role === "owner") && (await noOtherOwner(store, formId, subject))) {
+          // Sharing finds an owner only under the standard key. Without it the data erase would pass and the resource erase would be refused.
+          if (!mine.some((g) => g.id === `${formId}:${subject.kind}:${subject.id}` && g.role === "owner")) throw new Error("the owner grant has a key that sharing does not honor");
           if ((await store.query("resources", { where: { parentId: formId }, limit: 1 })).items.length > 0) throw new Error("the form has child resources");
-          const others = (await collect(store, "grants", { resourceId: formId })).length;
+          const grants = (await collect(store, "grants", { resourceId: formId })).length;
           const trail = (await collect(store, "audit", { resourceId: formId })).length;
           const snapshots = (await collect(store, "form_versions", { id: formId })).length;
           // The data goes first, so a stop leaves an owner who can run it again. Each count is added when its step is done.
@@ -156,13 +154,14 @@ export const formsAccount: FormsAccount = {
           counts.responses += first.erased;
           await sharing.deleteResource(ctx, formId);
           counts.forms += 1;
-          erased.add(formId);
-          counts.grants += others;
+          counts.grants += grants;
           counts.audit += trail;
           counts.responses += (await ops.erase(formId)).erased;
         } else {
-          await store.delete("grants", grant.id);
-          counts.grants += 1;
+          for (const grant of mine) {
+            await store.delete("grants", grant.id);
+            counts.grants += 1;
+          }
         }
       } catch (cause) {
         throw new FormsAccountError("erase_incomplete", `erase stopped at form ${formId}: ${counts.forms} forms, ${counts.form_versions} snapshots, ${counts.responses} responses, ${counts.grants} grants, and ${counts.audit} audit entries were erased before it`, { cause });

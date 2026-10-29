@@ -3,6 +3,8 @@
 import { z } from "zod";
 
 const id = z.string().min(1).max(100);
+// A form id is also a sharing resource id, so it holds only letters, digits, "-" and "_".
+const formId = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
 const condition = z
   .object({
     question: id,
@@ -29,7 +31,7 @@ export const questionSchema = z
 
 export const formSpecSchema = z
   .object({
-    id,
+    id: formId,
     title: z.string().min(1).max(200),
     notice: z.string().optional(),
     retentionDays: z.number().optional(),

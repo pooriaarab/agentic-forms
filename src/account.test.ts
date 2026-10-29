@@ -6,6 +6,9 @@
 //  5. A form with a second owner stays: only the subject's grant goes. A form shared to the subject stays.
 //  6. A person and an agent with one id are two subjects.
 //  7. A second erase counts zero and changes nothing.
+//  9. Audit rows with no known root kind, anonymous rows, delegated roots, and rows on other resource types are not matched.
+// 10. A grant with no kind stops both calls. An owner grant with no kind keeps the form.
+// 11. A stop after the data went keeps the counts of that form in the message, and a repeat finishes.
 //  8. A form that cannot be erased stops the run and names the form id.
 import { createMemoryStore, createSharing, type PrincipalContext, type Store } from "agentic-identity";
 import { describe, expect, it } from "vitest";
@@ -127,5 +130,47 @@ describe("eraseAccount", () => {
     expect(await store.get("forms", "ana-form")).not.toBeNull();
     expect((await all(store, "responses")).length).toBe(1);
     await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/ana-form/);
+  });
+
+  it("stops on a grant with no kind, and on an owner with no kind, and keeps the data", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    await store.put("grants", "ana-form:ana", { resourceId: "ana-form", subjectId: "ana", role: "viewer" });
+    await expect(formsAccount.exportAccount(ANA, { store })).rejects.toThrow(/migrateGrants/);
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/migrateGrants/);
+    await store.delete("grants", "ana-form:ana");
+    await store.put("grants", "ana-form:legacy", { resourceId: "ana-form", subjectId: "zed", role: "owner" });
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form ana-form/);
+    expect(await store.get("forms", "ana-form")).not.toBeNull();
+  });
+
+  it("matches audit rows only with a known root kind, on forms", async () => {
+    const store = createMemoryStore();
+    await make(store, "bob-form", ctx("bob"));
+    await store.put("audit", "anon", { id: "anon", rootId: "anonymous", principalKind: "anonymous", chain: [], resourceId: "bob-form" });
+    await store.put("audit", "bare", { id: "bare", rootId: "ana", resourceId: "bob-form" });
+    await store.put("audit", "other", { id: "other", rootId: "ana", chain: [{ id: "ana", kind: "human" }], resourceId: "doc-1" });
+    await store.put("resources", "doc-1", { id: "doc-1", type: "document" });
+    const agent = { id: "ana", kind: "agent" } as const;
+    expect((await formsAccount.exportAccount({ id: "anonymous", kind: "agent" }, { store })).audit).toEqual([]);
+    expect((await formsAccount.exportAccount(agent, { store })).audit).toEqual([]);
+    expect((await formsAccount.exportAccount(ANA, { store })).audit.map((a) => a.id)).not.toContain("other");
+    await formsAccount.eraseAccount(agent, { store });
+    await formsAccount.eraseAccount(ANA, { store });
+    expect((await all(store, "audit")).filter((a) => a.data.rootId !== "bob").map((a) => a.id).sort()).toEqual(["anon", "bare", "other"]);
+  });
+
+  it("keeps the counts of a form when the last step fails, and a repeat finishes", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    const real = store.transaction.bind(store);
+    let fail = true;
+    store.transaction = ((fn: never) => (fail ? Promise.reject(new Error("down")) : real(fn))) as typeof store.transaction;
+    const stopped = await formsAccount.eraseAccount(ANA, { store }).catch((e: Error) => e);
+    expect((stopped as Error).message).toMatch(/erase stopped at form ana-form: 0 forms, 1 snapshots, 1 responses/);
+    expect(((stopped as Error).cause as Error | undefined)?.message).toBeDefined();
+    fail = false;
+    expect(await formsAccount.eraseAccount(ANA, { store })).toMatchObject({ forms: 1, form_versions: 0, responses: 0 });
+    expect(await store.get("forms", "ana-form")).toBeNull();
   });
 });

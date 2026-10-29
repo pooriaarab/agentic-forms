@@ -134,6 +134,31 @@ There is one method per API route: `health`, `listForms`, `createForm`, `getForm
 - A 2xx reply that is not JSON rejects with `ApiError` (`code` is `bad_response`).
 - Pass `fetch` to `createClient` to use a proxy or a test double. For a service binding, pass `(input, init) => env.FORMS.fetch(input, init)`.
 
+### Use the repo and the MCP server in your code
+
+The package root exports `createFormRepo` and `createMcpServer`. Use them when your app keeps forms in its own `Store` (the port of `agentic-identity`). The app imports the store and the memory adapter from `agentic-identity`.
+
+```ts
+import { createMemoryStore } from "agentic-identity";
+import { createFormRepo, createMcpServer } from "agentic-forms";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+const store = createMemoryStore();
+console.log(await createFormRepo(store).getPublished("poll")); // the version that takes answers, or null
+await createMcpServer(store).connect(new StdioServerTransport()); // the eleven tools of `agentic-forms mcp`
+```
+
+`createFormRepo(store)` returns:
+
+- `get(id)` and `getVersion(id, version)` read the head (the latest version, draft or published) or one frozen version. Each returns `null` when the form is not there.
+- `getPublished(id)` reads the version that takes answers now.
+- `list()` reads every head, in order of id, and follows every page.
+- `save(form, { expectedVersion?, expectedRevision? })` stores a draft. It throws `FormError` on unsound logic. With `expectedVersion` or `expectedRevision`, the save is a compare-and-set: it throws `VersionConflictError` when the form changed since the caller read it.
+- `publish(id, { expectedRevision? })` freezes the head as a new version. It throws `SnapshotExistsError` rather than replace a frozen version.
+- `erase(id)` deletes the head first, so no new answer lands, then every frozen version. It is safe to run again.
+
+`createMcpServer(store, remote?)` returns an `McpServer`. Connect it to any transport of `@modelcontextprotocol/sdk`. Without `store`, it uses a memory store that is lost when the process exits. Pass `remote` as `{ url, token }` to add the three sharing tools, as the CLI does with `AGENTIC_FORMS_URL` and `AGENTIC_FORMS_TOKEN`. The MCP tools read and write the store as it is. They do not check a caller's role, so give an agent only the store it may change.
+
 ## UI
 
 The Worker serves a small web UI at `/ui/`. It uses the [`agentic-design`](https://www.npmjs.com/package/agentic-design) package for tokens, controls, dialogs, and the app shell. It calls the API through `agentic-forms/client`.

@@ -2,6 +2,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { ZodError } from "zod";
+import { BackfillError } from "./core/backfill.js";
 import { FormError } from "./core/repo.js";
 import { createFileStore } from "./core/file-store.js";
 import type { Answers } from "./core/form.js";
@@ -137,14 +138,20 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       case "backfill-owners": {
         const total = { created: [] as string[], skipped: 0, conflicts: [] as string[], invalid: [] as string[] };
         let cursor: string | undefined;
-        do {
-          const page = await ops.backfillOwners(str("owner"), { cursor });
-          total.created.push(...page.created);
-          total.skipped += page.skipped;
-          total.conflicts.push(...page.conflicts);
-          total.invalid.push(...page.invalid);
-          cursor = page.nextCursor;
-        } while (cursor !== undefined);
+        try {
+          do {
+            const page = await ops.backfillOwners(str("owner"), { cursor });
+            total.created.push(...page.created);
+            total.skipped += page.skipped;
+            total.conflicts.push(...page.conflicts);
+            total.invalid.push(...page.invalid);
+            cursor = page.nextCursor;
+          } while (cursor !== undefined);
+        } catch (error) {
+          // A second run skips the forms done so far. Show what this run did before the error.
+          err(`backfill stopped after: ${JSON.stringify(total)}`);
+          throw error;
+        }
         out(JSON.stringify(total));
         return 0;
       }
@@ -160,7 +167,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       return 2;
     }
     if (error instanceof ZodError) err(`error: ${error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`);
-    else if (error instanceof OpsError || error instanceof FormError || error instanceof SubmitError || error instanceof SyntaxError) err(`error: ${error.message}`);
+    else if (error instanceof OpsError || error instanceof BackfillError || error instanceof FormError || error instanceof SubmitError || error instanceof SyntaxError) err(`error: ${error.message}`);
     else throw error;
     return 1;
   }

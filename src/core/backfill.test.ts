@@ -80,6 +80,15 @@ describe("owner backfill", () => {
     expect(await grants(store)).toEqual(["a:olga", "z:olga"]);
   });
 
+  test("a bad limit or cursor is refused and nothing is written", async () => {
+    const store = createMemoryStore();
+    await legacy(store, "a");
+    for (const options of [{ limit: 0 }, { limit: 26 }, { limit: 1.5 }, { limit: NaN }, { limit: "5" }, { cursor: "junk" }, { cursor: 5 }]) {
+      await expect(backfillOwners(store, "olga", options as never), JSON.stringify(options)).rejects.toThrow();
+    }
+    expect(await grants(store)).toEqual([]);
+  });
+
   test("a bad owner is refused and nothing is written", async () => {
     const store = createMemoryStore();
     await legacy(store, "a");

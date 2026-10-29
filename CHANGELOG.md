@@ -2,6 +2,12 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.8.0 - 2026-10-29
+
+Breaking changes. Read these before you upgrade from 0.7.0:
+
+- BREAKING: design class prefix is now agd-. Design classes use `agd-`, and design custom properties use `--agd-*`, in the `/ui` app and on the public form page at `/f/<id>`. The old prefix is gone, with no alias. Ad blockers hide the old names, so a block rule could remove a button. A stylesheet or test that targets an old name must change. `agentic-design` is now 0.4.x, the release that ships the `agd-` names.
+
 ## 0.7.0 - 2026-10-29
 
 Breaking change for code that composes the schemas. Read it before you upgrade. The new commands and tools are optional.

@@ -49,7 +49,7 @@ export function explain(error: unknown): { message: string; issues: string[] } {
 export function Loading({ what }: { what: string }) {
   return (
     <p className="af-loading" role="status">
-      <span className="ad-spinner" aria-hidden="true" /> Loading {what}…
+      <span className="agd-spinner" aria-hidden="true" /> Loading {what}…
     </p>
   );
 }
@@ -73,7 +73,7 @@ export function ErrorBox({ error, onRetry, retry }: { error: unknown; onRetry?: 
 
 export function Gate<T>({ load, what, reload, children, empty }: { load: Load<T>; what: string; reload: () => void; children: (data: T) => ReactNode; empty?: (data: T) => ReactNode | null }) {
   if (load.state === "loading") return <Loading what={what} />;
-  if (load.state === "error") return <ErrorBox error={load.error} onRetry={reload} retry={<button className="ad-button" onClick={reload}>Try again</button>} />;
+  if (load.state === "error") return <ErrorBox error={load.error} onRetry={reload} retry={<button className="agd-button" onClick={reload}>Try again</button>} />;
   return <>{empty?.(load.data) ?? children(load.data)}</>;
 }
 

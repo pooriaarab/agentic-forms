@@ -109,7 +109,7 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
       <Input label="Form title" value={title} onChange={(e) => setTitle(e.target.value)} />
       {sections.map((s, si) => (
         <section key={s.id} className="af-stack" aria-labelledby={`sec-${si}`}>
-          <h2 id={`sec-${si}`} style={{ margin: 0, fontSize: "var(--ad-font-size-lg)" }}>
+          <h2 id={`sec-${si}`} style={{ margin: 0, fontSize: "var(--agd-font-size-lg)" }}>
             {s.title}
           </h2>
           {s.questions.length === 0 ? (

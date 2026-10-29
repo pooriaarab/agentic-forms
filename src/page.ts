@@ -7,18 +7,18 @@ const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;"
 const esc = (text: string): string => text.replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
 const STYLE = `
-body{margin:0;font:var(--ad-font-size-lg,1.125rem)/1.6 var(--ad-font-family-sans,system-ui,sans-serif);color:var(--ad-color-text,#1a1a1a);background:var(--ad-color-bg,#fff)}
+body{margin:0;font:var(--agd-font-size-lg,1.125rem)/1.6 var(--agd-font-family-sans,system-ui,sans-serif);color:var(--agd-color-text,#1a1a1a);background:var(--agd-color-bg,#fff)}
 main{max-width:40rem;margin:0 auto;padding:1.5rem 1rem 4rem}
-fieldset{border:1px solid var(--ad-color-border-strong,#595959);border-radius:var(--ad-radius-md,4px);padding:1rem;margin:0 0 1.5rem}
+fieldset{border:1px solid var(--agd-color-border-strong,#595959);border-radius:var(--agd-radius-md,4px);padding:1rem;margin:0 0 1.5rem}
 legend{font-weight:600;padding:0 .25rem}
 label{display:block;font-weight:600;margin:.75rem 0 .25rem}
 .opt{display:flex;gap:.5rem;align-items:center;min-height:44px}
 .opt label{margin:0;font-weight:400}
-input[type=checkbox],input[type=radio]{width:1.5rem;height:1.5rem;flex:none;accent-color:var(--ad-color-accent,#0b57d0)}
-input:not([type=checkbox]):not([type=radio]),textarea,select{width:100%;box-sizing:border-box;min-height:44px;padding:.5rem;font:inherit;color:inherit;background:var(--ad-color-surface,#fff);border:2px solid var(--ad-color-border-strong,#595959);border-radius:var(--ad-radius-sm,4px)}
-:focus-visible{outline:3px solid var(--ad-color-focus,#0b57d0);outline-offset:2px}
-button{min-height:44px;padding:.5rem 1.5rem;font:inherit;font-weight:600;color:var(--ad-color-text-on-accent,#fff);background:var(--ad-color-accent,#0b57d0);border:2px solid var(--ad-color-accent,#0b57d0);border-radius:var(--ad-radius-sm,4px);cursor:pointer}
-#errors{border:3px solid var(--ad-color-danger,#b3261e);padding:1rem;margin:0 0 1.5rem}
+input[type=checkbox],input[type=radio]{width:1.5rem;height:1.5rem;flex:none;accent-color:var(--agd-color-accent,#0b57d0)}
+input:not([type=checkbox]):not([type=radio]),textarea,select{width:100%;box-sizing:border-box;min-height:44px;padding:.5rem;font:inherit;color:inherit;background:var(--agd-color-surface,#fff);border:2px solid var(--agd-color-border-strong,#595959);border-radius:var(--agd-radius-sm,4px)}
+:focus-visible{outline:3px solid var(--agd-color-focus,#0b57d0);outline-offset:2px}
+button{min-height:44px;padding:.5rem 1.5rem;font:inherit;font-weight:600;color:var(--agd-color-text-on-accent,#fff);background:var(--agd-color-accent,#0b57d0);border:2px solid var(--agd-color-accent,#0b57d0);border-radius:var(--agd-radius-sm,4px);cursor:pointer}
+#errors{border:3px solid var(--agd-color-danger,#b3261e);padding:1rem;margin:0 0 1.5rem}
 .req{font-weight:400}
 .notice{white-space:pre-line}
 [hidden]{display:none!important}`;

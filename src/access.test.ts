@@ -181,7 +181,7 @@ describe("rows from other apps or bad data", () => {
     await call(olga, "POST", "", spec("b"));
     await store.put("grants", "b:human:olga", { resourceId: "b", subjectKind: "human", subjectId: "olga", role: "king" });
     await store.put("grants", "ghost:human:olga", { resourceId: "ghost", subjectKind: "human", subjectId: "olga", role: "owner" });
-    await createSharing(store).createResource(human("olga", ["doc:write"]), { id: "d", type: "doc" });
+    await createSharing(store).createResource(human("olga", ["*:admin"]), { id: "d", type: "doc" });
     const ids = ((await (await call(olga, "GET", "")).json()) as { forms: { id: string }[] }).forms.map((f) => f.id);
     expect(ids).toEqual(["a"]);
   });
@@ -297,12 +297,24 @@ describe("kinds and erase", () => {
     await call(olga, "POST", "/a/shares", { subject: "eda", kind: "human", role: "editor" });
     await store.put("responses", "r1", { id: "r1", formId: "a", submittedAt: "2026-01-01T00:00:00.000Z" } as never);
     expect((await call(eda, "DELETE", "/a")).status).toBe(403);
-    expect((await call(olga, "DELETE", "/a")).status).toBe(200);
+    const deleted = await call(olga, "DELETE", "/a");
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({ ok: true, erased: 1 });
     expect((await call(olga, "GET", "/a")).status).toBe(404);
     for (const collection of ["forms", "form_versions", "responses", "grants", "resources"]) {
       expect((await store.query(collection)).items, collection).toHaveLength(0);
     }
     // the id is free again
     expect((await call(olga, "POST", "", spec("a"))).status).toBe(201);
+  });
+
+  test("a delete that identity would refuse destroys nothing", async () => {
+    const olga = await issue(human("olga"));
+    await call(olga, "POST", "", { ...spec("a"), publish: true });
+    await store.put("responses", "r1", { id: "r1", formId: "a", submittedAt: "2026-01-01T00:00:00.000Z" } as never);
+    await createSharing(store).createResource(human("olga", ["*:admin"]), { type: "doc", parentId: "a" });
+    expect((await call(olga, "DELETE", "/a")).status).toBe(409);
+    expect(await store.get("responses", "r1")).not.toBeNull();
+    expect((await call(olga, "GET", "/a")).status).toBe(200);
   });
 });

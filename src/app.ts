@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { SubmitError } from "./core/responses.js";
 import { FormError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
-import { EraseRefusedError, MAX_AUDIT_PAGE, ROLES, SUBJECT_KINDS, createMemoryStore, createSharing, hasScope, migrateGrants, type Action, type Auth, type PrincipalContext, type Role, type Store, type SubjectKind } from "agentic-identity";
+import { EraseRefusedError, MAX_AUDIT_PAGE, MAX_OWNERS_ON_ERASE, ROLES, SUBJECT_KINDS, createMemoryStore, createSharing, hasScope, migrateGrants, type Action, type Auth, type PrincipalContext, type Role, type Store, type SubjectKind } from "agentic-identity";
 import { clientKey, createRateLimiter } from "./core/rate-limit.js";
 import { BackfillError } from "./core/backfill.js";
 import { FORM_ID, SUBJECT_ID, wellFormedCursor } from "./core/schema.js";
@@ -193,10 +193,19 @@ export function createApp(options: AppOptions = {}) {
   // Erases the form, its answers, and its grants, links, invites, and audit rows. Only an owner may.
   app.delete(`${forms}/:id`, async (c) => {
     await require(c, "admin", c.req.param("id"));
+    const id = c.req.param("id");
+    // deleteResource refuses a resource with children or too many owners. Check first, so a refusal destroys nothing.
+    if ((await store.query("resources", { where: { parentId: id }, limit: 1 })).items.length > 0) throw new OpsError("conflict", "the form has child resources");
+    if ((await store.query("grants", { where: { resourceId: id, role: "owner" }, limit: MAX_OWNERS_ON_ERASE + 1 })).items.length > MAX_OWNERS_ON_ERASE) {
+      throw new OpsError("conflict", `the form has more than ${MAX_OWNERS_ON_ERASE} owners`);
+    }
     // The data goes first. A failed erase then leaves an owner who can run it again.
-    const { erased } = await ops.erase(c.req.param("id"));
-    await sharing.deleteResource(c.get("ctx"), c.req.param("id"));
-    return c.json({ ok: true, erased });
+    // A check and a delete are two steps. A child made in between still refuses the delete, and the data is then gone. Run it again.
+    const first = await ops.erase(id);
+    await sharing.deleteResource(c.get("ctx"), id);
+    // A submit that read the form before it went can land after the first pass.
+    const second = await ops.erase(id);
+    return c.json({ ok: true, erased: first.erased + second.erased });
   });
   app.post(`${forms}/:id/shares`, async (c) => {
     await require(c, "admin", c.req.param("id"));
@@ -204,12 +213,17 @@ export function createApp(options: AppOptions = {}) {
     if (typeof subject !== "string" || !SUBJECT.test(subject) || !isSubjectKind(kind) || !SHARE_ROLES.includes(role as Role)) {
       return c.json({ error: "invalid_share", message: `give a subject of letters, digits, "-" and "_", a kind of ${SUBJECT_KINDS.join(" or ")}, and a role of ${SHARE_ROLES.join(", ")}` }, 400);
     }
-    // identity's grant() does not guard the last owner, so check here. Two owners demoted at the same moment can still pass.
+    // Identity guards the last owner too, but it ignores a grant with no kind. Check here as well. Two owners demoted at the same moment can still pass.
     if (role !== "owner") {
       const owners = (await store.query("grants", { where: { resourceId: c.req.param("id"), role: "owner" }, limit: 2 })).items;
       if (owners.length === 1 && owners[0]!.data.subjectId === subject && owners[0]!.data.subjectKind === kind) throw new OpsError("conflict", "the last owner cannot be removed");
     }
-    await sharing.grant(c.get("ctx"), c.req.param("id"), { kind, id: subject }, role as Role);
+    try {
+      await sharing.grant(c.get("ctx"), c.req.param("id"), { kind, id: subject }, role as Role);
+    } catch (error) {
+      if (error instanceof Error && error.message === "the last owner cannot be removed") throw new OpsError("conflict", error.message);
+      throw error;
+    }
     return c.json({ ok: true });
   });
   app.delete(`${forms}/:id/shares/:subject`, async (c) => {
@@ -243,12 +257,12 @@ export function createApp(options: AppOptions = {}) {
     return c.json(await ops.purgeAll(now()));
   });
 
-  // For forms made before roles. Only a caller with the all-forms admin scope may run it.
   // Rewrites grants made before grants had a kind. Until then they are not honored. Safe to run again.
   app.post("/api/v1/migrate-grants", async (c) => {
     if (!hasScope(c.get("ctx").scopes, "*:admin")) throw new AccessError(403);
     return c.json(await migrateGrants(store));
   });
+  // For forms made before roles. Only a caller with the all-forms admin scope may run it.
   app.post("/api/v1/backfill-owners", async (c) => {
     if (!hasScope(c.get("ctx").scopes, "*:admin")) throw new AccessError(403);
     const body = await c.req.json();

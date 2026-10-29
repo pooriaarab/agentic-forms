@@ -81,9 +81,9 @@ export function createOps(store: Store) {
     backfillOwners: (owner: string, options?: { limit?: number; cursor?: string }) => backfillOwners(store, owner, options),
     /** Hard-deletes a form, its snapshots, and all its responses. Safe to run again. */
     async erase(formId: string) {
-      const erased = await responses.eraseAll(formId);
+      // The head goes first, so a submit that comes later finds no form.
       await repo.erase(formId);
-      return { erased };
+      return { erased: await responses.eraseAll(formId) };
     },
     async purge(formId: string) {
       await get(formId);

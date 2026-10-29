@@ -44,7 +44,7 @@ Start it with `agentic-forms mcp`. The tools are `new_form`, `add_question`, `up
 
 ## The web UI
 
-People use the web UI at `/ui/` on the Worker. An agent never needs it: every action except listing forms is a tool, a command, or an API call. Listing forms is an API call. Questions an agent makes or changes show an "Agent" mark in the UI.
+People use the web UI at `/ui/` on the Worker. An agent never needs it: every action is a tool, a command, or an API call. Questions an agent makes or changes show an "Agent" mark in the UI.
 
 ## Rules
 

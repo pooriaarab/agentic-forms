@@ -41,6 +41,7 @@ validateAnswers(form, { role: "dev" }).issues; // one "required" issue for "stac
 ```sh
 npx agentic-forms new poll --title "Poll"
 npx agentic-forms add-question poll --id color --type single_choice --label Color --choices red,blue --required
+npx agentic-forms update poll --spec edited.json            # edit, reorder, or remove questions
 npx agentic-forms publish poll
 npx agentic-forms responses poll
 npx agentic-forms export poll > poll.csv
@@ -73,7 +74,7 @@ try {
 }
 ```
 
-There is one method per API route: `health`, `listForms`, `createForm`, `getForm`, `addQuestion`, `publishForm`, `listResponses`, `exportCsv`, `purge`, `eraseForm`, `share`, `revokeShare`, `listAudit`, `purgeAll`, `migrateGrants`, `backfillOwners`, and the public `submit` (it sends no token). `GET /f/<id>` is a page for people, so it has no method.
+There is one method per API route: `health`, `listForms`, `createForm`, `getForm`, `updateForm`, `addQuestion`, `publishForm`, `listResponses`, `exportCsv`, `purge`, `eraseForm`, `share`, `revokeShare`, `listAudit`, `purgeAll`, `migrateGrants`, `backfillOwners`, and the public `submit` (it sends no token). `GET /f/<id>` is a page for people, so it has no method.
 
 - A refused call throws `ApiError` with `status` (HTTP status), `code` (the API `error` field), `message`, `retryAfter` (seconds, on a 429), and `issues` when the API lists faults.
 - Every method takes `{ signal }` last, to cancel the call with an `AbortSignal`. A cancel rejects with the reason of the signal (an `AbortError` by default).

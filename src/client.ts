@@ -1,7 +1,7 @@
 // A typed client for the Worker HTTP API. It uses only web APIs (fetch, URL, AbortSignal),
 // so it runs in browsers, Workers, and Node 22. It never retries a call.
 import type { Answers, Form } from "./core/form.js";
-import type { formSpecSchema, questionSchema } from "./core/schema.js";
+import type { formSpecSchema, formUpdateSchema, questionSchema } from "./core/schema.js";
 import type { z } from "zod";
 import type { BackfillResult } from "./core/backfill.js";
 import type { Response as FormResponse } from "./core/responses.js";
@@ -9,6 +9,7 @@ import type { AuditEntry } from "agentic-identity";
 
 /** A spec as a caller writes it: defaults such as `required` may be left out. */
 export type FormSpecInput = z.input<typeof formSpecSchema>;
+export type FormUpdateInput = z.input<typeof formUpdateSchema>;
 export type QuestionInput = z.input<typeof questionSchema>;
 export type ShareRole = "owner" | "editor" | "viewer";
 export type SubjectKind = "human" | "agent";
@@ -121,6 +122,8 @@ export function createClient(options: ClientOptions) {
     createForm: (spec: FormSpecInput & { publish?: boolean }, call: CallOptions = {}) => json<Form>("POST", "/api/v1/forms", { signal: call.signal, body: spec }),
     /** GET /api/v1/forms/:id. */
     getForm: (formId: string, call: CallOptions = {}) => json<Form>("GET", form(formId), { signal: call.signal }),
+    /** PUT /api/v1/forms/:id. Replaces title, notice, retention, and sections: edit, reorder, or remove questions. Pass `expectedVersion` to refuse the write when the form moved (409 `version_conflict`). */
+    updateForm: (formId: string, spec: FormUpdateInput, call: CallOptions = {}) => json<Form>("PUT", form(formId), { signal: call.signal, body: spec }),
     /** POST /api/v1/forms/:id/questions. On a published form this starts a new draft version. */
     addQuestion: (formId: string, question: QuestionInput, addOptions: { section?: string } & CallOptions = {}) =>
       json<Form>("POST", `${form(formId)}/questions`, { signal: addOptions.signal, body: { question, section: addOptions.section } }),

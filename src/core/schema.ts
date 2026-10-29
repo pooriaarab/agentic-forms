@@ -41,6 +41,8 @@ export const questionSchema = z
       .strict()
       .optional(),
     showIf: condition.optional(),
+    /** Read-only for callers: ops replaces it with the kind of the caller. */
+    madeBy: z.enum(["human", "agent"]).optional(),
   })
   .strict();
 
@@ -55,6 +57,9 @@ export const formSpecSchema = z
       .min(1),
   })
   .strict();
+
+/** The part of a form that an update replaces. The id comes from the path. */
+export const formUpdateSchema = formSpecSchema.omit({ id: true }).extend({ expectedVersion: z.number().int().min(1).optional() });
 
 export type FormSpec = z.infer<typeof formSpecSchema>;
 export type QuestionSpec = z.infer<typeof questionSchema>;

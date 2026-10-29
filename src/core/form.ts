@@ -38,6 +38,8 @@ export type Question = {
   choices?: string[];
   rules?: Rules;
   showIf?: Condition;
+  /** Who made or last changed this question. The server sets it from the caller; a caller cannot. Unset when unknown. */
+  madeBy?: "human" | "agent";
 };
 
 export type Section = {

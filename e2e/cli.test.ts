@@ -78,6 +78,9 @@ describe("cli flow", () => {
     expect(json(cli(["new", "poll", "--title", "Poll", "--retention-days", "30"]).out)).toMatchObject({ version: 1, status: "draft" });
     cli(["add-question", "poll", "--id", "color", "--type", "single_choice", "--label", "Color", "--required", "--choices", "red,blue"]);
     cli(["add-question", "poll", "--id", "why", "--type", "long_text", "--label", "Why", "--required", "--show-if", "color:equals:red"]);
+    const edit = { title: "Poll 2", sections: [{ id: "main", title: "Poll", questions: [{ id: "color", type: "single_choice", label: "Color", required: true, choices: ["red", "blue"] }, { id: "why", type: "long_text", label: "Why", required: true, showIf: { question: "color", op: "equals", value: "red" } }] }] };
+    expect(json(cli(["update", "poll", "--spec", "-"], JSON.stringify(edit)).out)).toMatchObject({ title: "Poll 2" });
+    expect(cli(["update", "poll"]).code).toBe(2);
     expect(cli(["submit", "poll", "--answers", '{"color":"red"}']).code).toBe(1); // draft is not open
     expect(json(cli(["publish", "poll"]).out).status).toBe("published");
     expect(cli(["submit", "poll", "--answers", '{"color":"red"}']).err).toContain("why");

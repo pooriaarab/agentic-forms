@@ -21,6 +21,7 @@ Commands:
       [--required] [--choices a,b] [--show-if q:op[:value]] [--section <s>]
       [--min n] [--max n] [--min-length n] [--max-length n] [--pattern re]
   from-prompt --spec <file|-> [--publish]                      Make a form from a JSON spec.
+  update <id> --spec <file|->                                  Replace title, notice, and sections from JSON.
   publish <id>                                                 Open the form to answers.
   show <id>                                                    Print the form as JSON.
   submit <id> --answers <json> [--consent]                     Store one response.
@@ -113,6 +114,11 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       case "from-prompt": {
         const spec = str("spec");
         out(JSON.stringify(await ops.create(JSON.parse(readFileSync(spec === "-" ? 0 : spec, "utf8")), flags.publish === true)));
+        return 0;
+      }
+      case "update": {
+        const spec = str("spec");
+        out(JSON.stringify(await ops.update(need(), JSON.parse(readFileSync(spec === "-" ? 0 : spec, "utf8")))));
         return 0;
       }
       case "publish":

@@ -242,6 +242,18 @@ export function createApp(options: AppOptions = {}) {
     }
     return c.json({ ok: true });
   });
+  // Who holds a role on the form. Only an owner may ask. Pass `nextCursor` back as `cursor` to read on.
+  app.get(`${forms}/:id/shares`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const raw = c.req.query("limit");
+    const limit = raw === undefined ? undefined : Number(raw);
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_AUDIT_PAGE)) {
+      return c.json({ error: "invalid_query", message: `limit is a whole number from 1 to ${MAX_AUDIT_PAGE}` }, 400);
+    }
+    const cursor = c.req.query("cursor");
+    if (cursor !== undefined && !wellFormedCursor(cursor)) return c.json({ error: "invalid_query", message: "the cursor is not valid" }, 400);
+    return c.json(await sharing.listGrants(c.get("ctx"), c.req.param("id"), { limit, cursor }));
+  });
   app.delete(`${forms}/:id/shares/:subject`, async (c) => {
     await require(c, "admin", c.req.param("id"));
     const kind = c.req.query("kind");

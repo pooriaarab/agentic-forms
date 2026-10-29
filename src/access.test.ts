@@ -36,7 +36,7 @@ const call = (token: string | undefined, method: string, path: string, body?: un
 describe("who may call", () => {
   test("no credential or a wrong one is 401 on every route, and nothing is created", async () => {
     for (const token of [undefined, "nope", "a".repeat(100)]) {
-      for (const [method, path] of [["GET", ""], ["POST", ""], ["GET", "/x"], ["POST", "/x/publish"], ["GET", "/x/responses"], ["GET", "/x/export"], ["POST", "/x/purge"], ["POST", "/x/shares"], ["GET", "/x/audit"]]) {
+      for (const [method, path] of [["GET", ""], ["POST", ""], ["GET", "/x"], ["POST", "/x/publish"], ["GET", "/x/responses"], ["GET", "/x/export"], ["POST", "/x/purge"], ["POST", "/x/shares"], ["GET", "/x/shares"], ["GET", "/x/audit"]]) {
         expect((await call(token, method, path, method === "POST" ? spec("x") : undefined)).status, `${method} ${path}`).toBe(401);
       }
     }
@@ -98,6 +98,12 @@ describe("owner and roles", () => {
     expect((await call(eda, "POST", "/a/purge")).status).toBe(403);
     expect((await call(eda, "POST", "/a/shares", { subject: "sam", kind: "human", role: "viewer" })).status).toBe(403);
     expect((await call(eda, "GET", "/a/audit")).status).toBe(403);
+    expect((await call(eda, "GET", "/a/shares")).status).toBe(403);
+    expect((await call(vic, "GET", "/a/shares")).status).toBe(403);
+    const listed = await call(olga, "GET", "/a/shares");
+    expect(listed.status).toBe(200);
+    expect(((await listed.json()) as { grants: { subjectId: string; role: string }[] }).grants.map((g) => `${g.subjectId}:${g.role}`).sort()).toEqual(["eda:editor", "olga:owner", "vic:viewer"]);
+    for (const query of ["limit=0", "limit=99999", "limit=x", "cursor=%00"]) expect((await call(olga, "GET", `/a/shares?${query}`)).status, query).toBe(400);
     expect((await call(olga, "POST", "/a/purge")).status).toBe(200);
   });
 

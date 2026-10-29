@@ -2,6 +2,13 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## Unreleased
+
+### Added
+
+- Sharing from the CLI and MCP. CLI commands `share`, `shares`, and `unshare`, and MCP tools `share_form`, `list_shares`, and `unshare_form`. They call the Worker, because roles live on the server: set `--url` (or `$AGENTIC_FORMS_URL`) and `$AGENTIC_FORMS_TOKEN`. A local file has no roles, so the MCP tools exist only with a Worker. `mcp` with a URL and no token starts without the sharing tools and warns on stderr. The Worker has no share links, so there is no command for them.
+- `GET /api/v1/forms/:id/shares` lists who holds a role on a form (owner only), and the client has `listShares`.
+
 ## 0.6.0 - 2026-10-29
 
 Breaking changes. Read these before you upgrade from 0.5.0:

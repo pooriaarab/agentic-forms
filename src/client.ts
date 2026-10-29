@@ -148,6 +148,9 @@ export function createClient(options: ClientOptions) {
     /** POST /api/v1/forms/:id/shares. A person and an agent with one id hold separate roles. */
     share: (formId: string, share: { subject: string; kind: SubjectKind; role: ShareRole }, call: CallOptions = {}) =>
       json<{ ok: true }>("POST", `${form(formId)}/shares`, { signal: call.signal, body: share }),
+    /** GET /api/v1/forms/:id/shares. Who holds a role. Owner only. One page: pass `nextCursor` back as `cursor`. */
+    listShares: (formId: string, query: { limit?: number; cursor?: string } = {}, call: CallOptions = {}) =>
+      json<{ grants: { resourceId: string; subjectKind: SubjectKind; subjectId: string; role: string }[]; nextCursor?: string }>("GET", `${form(formId)}/shares`, { signal: call.signal, query }),
     /** DELETE /api/v1/forms/:id/shares/:subject?kind=. */
     revokeShare: (formId: string, subject: string, kind: SubjectKind, call: CallOptions = {}) =>
       json<{ ok: true }>("DELETE", `${form(formId)}/shares/${id(subject)}`, { signal: call.signal, query: { kind } }),

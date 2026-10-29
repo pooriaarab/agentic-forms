@@ -7,6 +7,7 @@ import { FormError, VersionConflictError } from "./core/repo.js";
 import { createFileStore } from "./core/retry-store.js";
 import type { Answers } from "./core/form.js";
 import { SubmitError } from "./core/responses.js";
+import { ApiError, createClient, type ShareRole, type SubjectKind } from "./client.js";
 import { OpsError, createOps } from "./ops.js";
 import { VERSION } from "./version.js";
 
@@ -31,10 +32,18 @@ Commands:
   purge <id>                                                   Delete responses past retention.
   purge-all                                                    Delete expired responses of every form.
   backfill-owners --owner <id>                                 Give forms made before roles an owner. Safe to run again.
+  share <id> --subject <s> --kind <human|agent> --role <r>     Give a person or an agent a role. Needs --url. Owner only.
+  shares <id> [--limit n] [--cursor c]                         Print who holds a role. Needs --url. Owner only.
+  unshare <id> --subject <s> --kind <human|agent>              Take a role away. Needs --url. Owner only.
   mcp                                                          Start the MCP server on stdio.
+
+Sharing needs a Worker: roles live on the server, and a local file has none. Set $AGENTIC_FORMS_TOKEN to a bearer token. A role is owner, editor, or viewer.
+The Worker has no share links: a form is shared with named people and agents. Its public fill page is /f/<id>.
+With --url or $AGENTIC_FORMS_URL set, "mcp" also has the tools share_form, list_shares, and unshare_form.
 
 Flags:
   --by <human|agent>   Mark the questions this command makes or changes. Default: no mark. A local file has no signed-in caller, so this is your own claim.
+  --url <url>     The Worker origin for the sharing commands. Default: $AGENTIC_FORMS_URL.
   --data <file>   Data file. Default: $AGENTIC_FORMS_DATA or ./agentic-forms.json.
   --help, -h      Print this help.
   --version, -V   Print the version.`;
@@ -67,6 +76,16 @@ const num = (flags: Record<string, string | true>, name: string): number | undef
   return value;
 };
 
+const SHARE_COMMANDS = new Set(["share", "shares", "unshare"]);
+
+function remoteFrom(flags: Record<string, string | true>, env: NodeJS.ProcessEnv = process.env): { url: string; token: string } | undefined {
+  const url = typeof flags.url === "string" ? flags.url : env.AGENTIC_FORMS_URL;
+  if (url === undefined || url === "") return undefined;
+  const token = env.AGENTIC_FORMS_TOKEN;
+  if (token === undefined || token === "") throw new UsageError("sharing needs $AGENTIC_FORMS_TOKEN");
+  return { url, token };
+}
+
 function showIf(text: string) {
   const [question, op, ...rest] = text.split(":");
   const value = rest.join(":");
@@ -81,7 +100,36 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
     if (command === undefined || flags.help) return out(HELP), 0;
     if (command === "mcp") {
       const { startMcp } = await import("./mcp.js");
-      await startMcp(createFileStore(dataPath(flags)));
+      // A URL with no token keeps the local tools and drops the sharing tools, so an exported URL never stops the server.
+      let remote: ReturnType<typeof remoteFrom>;
+      try {
+        remote = remoteFrom(flags);
+      } catch (error) {
+        if (!(error instanceof UsageError)) throw error;
+        err(`${error.message}: the sharing tools are off`);
+      }
+      await startMcp(createFileStore(dataPath(flags)), remote);
+      return 0;
+    }
+    if (SHARE_COMMANDS.has(command)) {
+      const remote = remoteFrom(flags);
+      if (!remote) throw new UsageError("sharing needs a Worker: set --url or $AGENTIC_FORMS_URL, and $AGENTIC_FORMS_TOKEN. A local file has no roles");
+      const client = createClient({ baseUrl: remote.url, token: remote.token });
+      const formId = id;
+      if (formId === undefined) throw new UsageError(`${command} needs a form id`);
+      const subject = () => {
+        if (typeof flags.subject !== "string") throw new UsageError(`${command} needs --subject`);
+        return flags.subject;
+      };
+      const kind = (): SubjectKind => {
+        if (flags.kind !== "human" && flags.kind !== "agent") throw new UsageError("--kind is human or agent");
+        return flags.kind;
+      };
+      if (command === "share") {
+        if (flags.role !== "owner" && flags.role !== "editor" && flags.role !== "viewer") throw new UsageError("--role is owner, editor, or viewer");
+        out(JSON.stringify(await client.share(formId, { subject: subject(), kind: kind(), role: flags.role as ShareRole })));
+      } else if (command === "unshare") out(JSON.stringify(await client.revokeShare(formId, subject(), kind())));
+      else out(JSON.stringify(await client.listShares(formId, { limit: num(flags, "limit"), cursor: typeof flags.cursor === "string" ? flags.cursor : undefined })));
       return 0;
     }
     const by = flags.by === undefined ? undefined : flags.by === "human" || flags.by === "agent" ? flags.by : (() => { throw new UsageError("--by is human or agent"); })();
@@ -181,7 +229,8 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       err(`${error.message}\nRun "agentic-forms --help" for usage.`);
       return 2;
     }
-    if (error instanceof ZodError) err(`error: ${error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`);
+    if (error instanceof ApiError) err(`error: ${error.code}: ${error.message}`);
+    else if (error instanceof ZodError) err(`error: ${error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`);
     else if (error instanceof OpsError || error instanceof BackfillError || error instanceof FormError || error instanceof VersionConflictError || error instanceof SubmitError || error instanceof SyntaxError) err(`error: ${error.message}`);
     else throw error;
     return 1;

@@ -90,7 +90,7 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 - Local `wrangler dev` uses a D1 that reports no region, so the region check fails there. For local work only, set `FORMS_REGION=unknown` and `FORMS_UNSAFE_LOCAL_REGION=1`. Never set `FORMS_UNSAFE_LOCAL_REGION` in a deployed Worker.
 - Import `createMemoryStore` and the `Store` types from `agentic-identity`. This package does not re-export them.
 - The fill page needs JavaScript and does not show file questions.
-- Forms made before roles have no owner. Give them one with one of these:
+- Forms with no owner row (made before roles, or made through the SDK, CLI or MCP) are closed to the API. Give them one with one of these:
   - CLI: `agentic-forms backfill-owners --owner <id>`. It goes through every form.
   - HTTP: `POST /api/v1/backfill-owners` with `{"owner": "<id>"}`. It needs the all-forms admin scope.
   - Code: `backfillOwners(store, owner)`.

@@ -14,5 +14,5 @@ export type { FormSpec, QuestionSpec } from "./core/schema.js";
 export { createTokenAuth } from "./core/token-auth.js";
 export { createFileStore } from "./core/file-store.js";
 export { createMcpServer } from "./mcp.js";
-export { backfillOwners } from "./core/backfill.js";
+export { BackfillError, backfillOwners } from "./core/backfill.js";
 export type { BackfillResult } from "./core/backfill.js";

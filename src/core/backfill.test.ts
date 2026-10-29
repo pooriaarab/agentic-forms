@@ -84,7 +84,7 @@ describe("owner backfill", () => {
     const store = createMemoryStore();
     await legacy(store, "a");
     for (const options of [{ limit: 0 }, { limit: 26 }, { limit: 1.5 }, { limit: NaN }, { limit: "5" }, { limit: null }, { cursor: "junk" }, { cursor: 5 }, { cursor: null }]) {
-      await expect(backfillOwners(store, "olga", options as never), JSON.stringify(options)).rejects.toThrow();
+      await expect(backfillOwners(store, "olga", options as never), JSON.stringify(options)).rejects.toMatchObject({ kind: "invalid_query" });
     }
     expect(await grants(store)).toEqual([]);
   });
@@ -93,7 +93,7 @@ describe("owner backfill", () => {
     const store = createMemoryStore();
     await legacy(store, "a");
     for (const owner of ["", "a b", "a/b", "x".repeat(129), undefined as unknown as string, 5 as unknown as string]) {
-      await expect(backfillOwners(store, owner), String(owner)).rejects.toThrow("owner");
+      await expect(backfillOwners(store, owner), String(owner)).rejects.toMatchObject({ kind: "invalid_owner" });
     }
     expect(await grants(store)).toEqual([]);
   });

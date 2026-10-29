@@ -6,7 +6,7 @@ This file lists what changed in each release. The versions follow semver. The AP
 
 No breaking changes. The new options and fields are optional.
 
-- Add a web UI for people. The Worker serves it at `/ui/`, and `GET /` goes there. A person signs in with an API token, builds a form, previews it, publishes it, and reads the responses. Every UI action also exists in the SDK, CLI, MCP, and HTTP API. The UI is built from this repo with `npm run build:ui`. The npm package does not include it.
+- Add a web UI for people. The Worker serves it at `/ui/`, and `GET /` goes there. A person signs in with an API token, builds a form, previews it, publishes it, and reads the responses. The UI calls the HTTP API. Each form action in it also exists in the SDK, CLI, MCP, or HTTP API. Listing forms exists only in the HTTP API and `agentic-forms/client`. The UI is built from this repo with `npm run build:ui`. The npm package does not include it.
 - Add `PUT /api/v1/forms/<id>`, `ops.update`, `client.updateForm`, the `update` CLI command, and the `update_form` MCP tool. They replace the title, notice, retention, and sections, so you can edit, reorder, or remove questions. An absent `notice` or `retentionDays` is kept. Send `null` to remove one.
 - Add `revision` to a form. It counts every save, including a draft edit. A form made before 0.4.0 reads as revision 0.
 - `update` and `publish` take `expectedRevision`. A write that does not match the stored revision answers 409 `version_conflict` and changes nothing. `update` also takes `expectedVersion`. The CLI has `publish --expected-revision n`.

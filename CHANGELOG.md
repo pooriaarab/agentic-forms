@@ -2,12 +2,24 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
-## Unreleased
+## 0.7.0 - 2026-10-29
+
+Breaking change for code that composes the schemas. Read it before you upgrade. The new commands and tools are optional.
+
+- Breaking: `formSpecSchema`, `formUpdateSchema`, and `questionSchema` are zod 4 schemas now, not zod 3. Code that builds on them with zod 3 (for example `.extend` or `.shape` from your own zod 3 import) must move to zod 4. The text of a validation error can also read differently.
 
 ### Added
 
 - Sharing from the CLI and MCP. CLI commands `share`, `shares`, and `unshare`, and MCP tools `share_form`, `list_shares`, and `unshare_form`. They call the Worker, because roles live on the server: set `--url` (or `$AGENTIC_FORMS_URL`) and `$AGENTIC_FORMS_TOKEN`. A local file has no roles, so the MCP tools exist only with a Worker. `mcp` with a URL and no token starts without the sharing tools and warns on stderr. The Worker has no share links, so there is no command for them.
 - `GET /api/v1/forms/:id/shares` lists who holds a role on a form (owner only), and the client has `listShares`.
+- Export the `RemoteOptions` type. It is the second argument of `createMcpServer`.
+
+### Changed
+
+- Move to `agentic-identity` 0.7.x and `agentic-design` 0.3.x. The package depends on these ranges now. The code needed no change.
+- The MCP SDK range starts at 1.23.0, the first version that accepts zod 4 schemas. An install that keeps an older lock file with SDK 1.22 or lower gets wrong tool schemas. Run `npm update @modelcontextprotocol/sdk` to move it.
+- Raise `zod` to 4.6.6, from 3.x (see the breaking note above). Versions below 4.6.6 can run out of memory while they validate an oversized constrained collection (GHSA-mrhx-c7xc-m3w5). Move `agentic-design` to 0.3.3, which uses zod 4, so an install has one zod copy. An install that keeps an older lock file pins `agentic-design` 0.3.2, which uses zod 3. Run `npm update agentic-design` to move it.
+- The publish workflow runs one publish at a time for each ref. A second run waits for the first one to finish. This does not change the package.
 
 ## 0.6.0 - 2026-10-29
 

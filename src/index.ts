@@ -13,5 +13,6 @@ export { formSpecSchema, formUpdateSchema, questionSchema } from "./core/schema.
 export type { FormSpec, QuestionSpec } from "./core/schema.js";
 export { createFileStore } from "./core/retry-store.js";
 export { createMcpServer } from "./mcp.js";
+export type { RemoteOptions } from "./mcp.js";
 export { BackfillError, backfillOwners } from "./core/backfill.js";
 export type { BackfillResult } from "./core/backfill.js";

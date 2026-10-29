@@ -1,6 +1,6 @@
 {
   "name": "agentic-forms",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Build forms and collect answers into tables.",
   "keywords": [
     "forms",
@@ -68,8 +68,8 @@
     "deploy:demo": "npm run build:ui && WRANGLER_SEND_METRICS=false wrangler deploy -c wrangler.demo.jsonc"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0",
-    "agentic-design": "^0.3.2",
+    "@modelcontextprotocol/sdk": "^1.23.0",
+    "agentic-design": "^0.3.3",
     "agentic-identity": "^0.7.0",
     "hono": "^4.13.14",
     "re2js": "^2.9.1",
@@ -104,11 +104,6 @@
     },
     "react-dom": {
       "optional": true
-    }
-  },
-  "overrides": {
-    "agentic-design": {
-      "zod": "^4.6.6"
     }
   }
 }

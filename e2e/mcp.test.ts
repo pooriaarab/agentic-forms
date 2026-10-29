@@ -48,6 +48,9 @@ describe("mcp over stdio", () => {
     expect((await call("add_question", { form: "survey", question: { id: "mood", type: "rating", label: "Mood" } })).error).toBe(false);
     const edited = await call("update_form", { form: "survey", title: "Survey 2", notice: "We store your name.", sections: [{ id: "s", title: "S", questions: [{ id: "mood", type: "rating", label: "Mood" }, { id: "name", type: "short_text", label: "Name", required: true }] }] });
     expect(edited.error).toBe(false);
+    const stale = await call("update_form", { form: "survey", title: "x", sections: [{ id: "s", title: "S", questions: [] }], expectedRevision: 0 });
+    expect(stale.error).toBe(true);
+    expect(stale.text).toContain("changed since revision");
     expect(JSON.parse(edited.text).sections[0].questions.map((q: { id: string; madeBy: string }) => `${q.id}:${q.madeBy}`)).toEqual(["mood:agent", "name:agent"]);
     expect((await call("publish_form", { form: "survey" })).error).toBe(false);
     expect((await call("submit_response", { form: "survey", answers: { name: "Ada" } })).text).toContain("consent");

@@ -3,7 +3,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { ZodError } from "zod";
 import { BackfillError } from "./core/backfill.js";
-import { FormError } from "./core/repo.js";
+import { FormError, VersionConflictError } from "./core/repo.js";
 import { createFileStore } from "./core/file-store.js";
 import type { Answers } from "./core/form.js";
 import { SubmitError } from "./core/responses.js";
@@ -178,7 +178,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       return 2;
     }
     if (error instanceof ZodError) err(`error: ${error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`);
-    else if (error instanceof OpsError || error instanceof BackfillError || error instanceof FormError || error instanceof SubmitError || error instanceof SyntaxError) err(`error: ${error.message}`);
+    else if (error instanceof OpsError || error instanceof BackfillError || error instanceof FormError || error instanceof VersionConflictError || error instanceof SubmitError || error instanceof SyntaxError) err(`error: ${error.message}`);
     else throw error;
     return 1;
   }

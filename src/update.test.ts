@@ -92,6 +92,13 @@ describe("PUT /api/v1/forms/:id", () => {
     expect(marks((await (await put(agent, spec([q("a"), q("b", { label: "B" })]))).json()) as never)).toEqual({ a: "human", b: "agent" });
   });
 
+  test("a question moved to another section keeps its mark", async () => {
+    const ops = createOps(createMemoryStore());
+    await ops.create({ id: "f", title: "T", sections: [{ id: "s", title: "S", questions: [q("a")] }, { id: "t", title: "T2", questions: [] }] }, false, "human");
+    const moved = await ops.update("f", { title: "T", sections: [{ id: "s", title: "S", questions: [] }, { id: "t", title: "T2", questions: [q("a")] }] }, "agent");
+    expect(moved.sections[1]!.questions[0]).toMatchObject({ id: "a", madeBy: "human" });
+  });
+
   test("a viewer is refused with 403", async () => {
     const store = createMemoryStore();
     const owner = createApp({ store, auth: as("human", "ada"), rateLimit: false });
@@ -110,6 +117,9 @@ describe("PUT /api/v1/forms/:id", () => {
     const stale = await put(owner, { ...spec([q("a")]), expectedVersion: 9 });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ error: "version_conflict" });
+    const behind = await put(owner, { ...spec([q("a")]), expectedRevision: 0 });
+    expect(behind.status).toBe(409);
+    expect(await behind.json()).toMatchObject({ error: "version_conflict", message: expect.stringContaining("revision 0") });
     expect((await put(owner, spec([q("a", { showIf: { question: "zz", op: "answered" } })]))).status).toBe(422);
     expect((await put(owner, { title: "" })).status).toBe(400);
     const stranger = createApp({ store, auth: as("human", "eve"), rateLimit: false });

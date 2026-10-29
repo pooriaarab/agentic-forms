@@ -59,7 +59,7 @@ export type Form = {
   /** Days to keep each response. Unset keeps responses until you delete them. */
   retentionDays?: number;
   sections: Section[];
-  /** Counts every save of the head, a draft edit too. Unset on forms made before it existed. `expectedRevision` compares against it. */
+  /** Counts every save of the head, a draft edit too. Unset on forms made before it existed: read it as 0. `expectedRevision` compares against it. */
   revision?: number;
 };
 

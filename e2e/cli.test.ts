@@ -81,6 +81,7 @@ describe("cli flow", () => {
     const edit = { title: "Poll 2", sections: [{ id: "main", title: "Poll", questions: [{ id: "color", type: "single_choice", label: "Color", required: true, choices: ["red", "blue"] }, { id: "why", type: "long_text", label: "Why", required: true, showIf: { question: "color", op: "equals", value: "red" } }] }] };
     expect(json(cli(["update", "poll", "--spec", "-"], JSON.stringify(edit)).out)).toMatchObject({ title: "Poll 2" });
     expect(cli(["update", "poll"]).code).toBe(2);
+    expect(cli(["update", "poll", "--spec", "-"], JSON.stringify({ ...edit, expectedRevision: 0 })).err).toContain("changed since revision");
     expect(cli(["update", "poll", "--spec", "-", "--by", "robot"], JSON.stringify(edit)).code).toBe(2);
     const marked = json(cli(["update", "poll", "--spec", "-", "--by", "agent"], JSON.stringify({ ...edit, title: "Poll 3", sections: [{ ...edit.sections[0], questions: [...edit.sections[0].questions, { id: "extra", type: "short_text", label: "Extra" }] }] })).out);
     expect(marked.retentionDays).toBe(30); // an absent retention is kept

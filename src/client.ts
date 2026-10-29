@@ -122,7 +122,7 @@ export function createClient(options: ClientOptions) {
     createForm: (spec: FormSpecInput & { publish?: boolean }, call: CallOptions = {}) => json<Form>("POST", "/api/v1/forms", { signal: call.signal, body: spec }),
     /** GET /api/v1/forms/:id. */
     getForm: (formId: string, call: CallOptions = {}) => json<Form>("GET", form(formId), { signal: call.signal }),
-    /** PUT /api/v1/forms/:id. Replaces title, notice, retention, and sections: edit, reorder, or remove questions. Pass `expectedRevision` (from `form.revision`) to refuse the write when anyone saved since you read it, or `expectedVersion` to refuse it after a publish (409 `version_conflict`). An absent notice or retentionDays is kept: send null to remove one. */
+    /** PUT /api/v1/forms/:id. Replaces title, notice, retention, and sections: edit, reorder, or remove questions. Pass `expectedRevision` (from `form.revision ?? 0`) to refuse the write when anyone saved since you read it, or `expectedVersion` to refuse it after a publish (409 `version_conflict`). An absent notice or retentionDays is kept: send null to remove one. */
     updateForm: (formId: string, spec: FormUpdateInput, call: CallOptions = {}) => json<Form>("PUT", form(formId), { signal: call.signal, body: spec }),
     /** POST /api/v1/forms/:id/questions. On a published form this starts a new draft version. */
     addQuestion: (formId: string, question: QuestionInput, addOptions: { section?: string } & CallOptions = {}) =>

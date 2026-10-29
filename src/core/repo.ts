@@ -13,7 +13,8 @@ export class FormError extends Error {
 
 /** The head moved since the caller read it. Read again and retry. */
 export class VersionConflictError extends Error {
-  constructor(readonly formId: string, readonly expected: number, readonly actual: number | null, message?: string) {
+  /** What `expected` and `actual` count: the head's version, or its revision. */
+  constructor(readonly formId: string, readonly expected: number, readonly actual: number | null, message?: string, readonly counts: "version" | "revision" = "version") {
     super(message ?? `form "${formId}" is at version ${actual ?? "none"}, not ${expected}`);
     this.name = "VersionConflictError";
   }
@@ -68,7 +69,7 @@ export function createFormRepo(store: Store) {
         }
         const { expectedRevision } = options;
         if (expectedRevision !== undefined && (head?.revision ?? 0) !== expectedRevision) {
-          throw new VersionConflictError(form.id, head?.version ?? 0, head?.version ?? null, `form "${form.id}" changed since revision ${expectedRevision}: read it again`);
+          throw new VersionConflictError(form.id, expectedRevision, head?.revision ?? 0, `form "${form.id}" changed since revision ${expectedRevision}: read it again`, "revision");
         }
         const version = head ? (head.status === "published" ? head.version + 1 : head.version) : 1;
         const draft: Form = { ...form, version, status: "draft", revision: (head?.revision ?? 0) + 1 };

@@ -103,7 +103,7 @@ describe("share links", () => {
   });
 
   test("bad input is 400 and stores nothing", async () => {
-    for (const body of [{ role: "owner" }, { role: "viewer", signedInOnly: "yes" }, { role: "viewer", expiresInMs: 0 }, { role: "viewer", expiresInMs: Number.MAX_SAFE_INTEGER }, {}, []]) {
+    for (const body of [{ role: "owner" }, { role: "viewer", signedInOnly: "yes" }, { role: "viewer", expiresInMs: 0 }, { role: "viewer", expiresInMs: 1 }, { role: "viewer", expiresInMs: Number.MAX_SAFE_INTEGER }, {}, []]) {
       expect((await call(olga, "POST", "/a/links", body)).status, JSON.stringify(body)).toBe(400);
     }
     expect((await store.query("links")).items).toHaveLength(0);

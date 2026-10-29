@@ -74,7 +74,7 @@ Every sharing call needs the owner role:
 | List share links | `listLinks` | `links` | `list_links` | `GET /links` |
 | Revoke a share link | `revokeLink` | `unlink --link <id>` | `revoke_link` | `DELETE /links/:link` |
 
-An invite or a link that this API makes gives `editor` or `viewer`, never `owner`: only a share makes an owner. A list also shows a `commenter` invite or link that `agentic-identity` made. An invite names an `email` (a person) or a `handle` (an agent). `expiresInMs` (`--expires-in-ms`) sets how long it lives. `signedInOnly` (`--signed-in-only`) limits a link to signed-in people. A list shows no email and no link token: the token shows once, in the reply that makes the link. This Worker only makes and manages invites and links. To accept an invite or open a link, run `agentic-identity` on the same store.
+An invite or a link that this API makes gives `editor` or `viewer`, never `owner`: only a share makes an owner. A list also shows a `commenter` invite or link that `agentic-identity` made. An invite names an `email` (a person) or a `handle` (an agent). `expiresInMs` (`--expires-in-ms`, at least 1000) sets how long it lives. `signedInOnly` (`--signed-in-only`) limits a link to signed-in people. A list shows no email and no link token: the token shows once, in the reply that makes the link. This Worker only makes and manages invites and links. To accept an invite or open a link, run `agentic-identity` on the same store.
 
 The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it). The file uses the store format of agentic-identity. A file written by 0.5.0 or earlier is refused and not migrated.
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.

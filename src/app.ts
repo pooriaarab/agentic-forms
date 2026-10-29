@@ -14,9 +14,11 @@ import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
 const SUBJECT = SUBJECT_ID;
-/** The handle rule of agentic-identity for an agent. The invite route checks it, so a bad handle is a 400, not a 500. */
 /** The roles an invite or a link row may hold and still work. This API makes editor and viewer; the library also honors commenter. */
 const LISTED_ROLES: ReadonlySet<string> = new Set(["viewer", "commenter", "editor"]);
+/** A shorter lifetime could end before the library reads the clock again, and it is no use to a person. */
+const MIN_SHARE_MS = 1000;
+/** The handle rule of agentic-identity for an agent. The invite route checks it, so a bad handle is a 400, not a 500. */
 const HANDLE = /^[a-z][a-z0-9_-]{1,31}$/;
 const publishBody = z.object({ expectedRevision: z.number().int().min(0).optional() }).strict();
 const by = (ctx: PrincipalContext) => (isMachineMade(ctx.kind) ? "agent" : "human");
@@ -288,7 +290,7 @@ export function createApp(options: AppOptions = {}) {
   const shareTerms = (body: Record<string, unknown>): { role: "editor" | "viewer"; expiresInMs?: number } | string => {
     if (body.role !== "editor" && body.role !== "viewer") return "give a role of editor or viewer";
     const ms = body.expiresInMs;
-    if (ms !== undefined && (typeof ms !== "number" || !Number.isSafeInteger(ms) || ms <= 0 || !Number.isSafeInteger(now() + ms))) return "expiresInMs is a whole number of milliseconds above 0, and it ends at a time that fits";
+    if (ms !== undefined && (typeof ms !== "number" || !Number.isSafeInteger(ms) || ms < MIN_SHARE_MS || !Number.isSafeInteger(now() + ms))) return `expiresInMs is a whole number of milliseconds, at least ${MIN_SHARE_MS}, and it ends at a time that fits`;
     return { role: body.role, ...(ms === undefined ? {} : { expiresInMs: ms }) };
   };
   const readBody = async (c: Context): Promise<Record<string, unknown>> => {

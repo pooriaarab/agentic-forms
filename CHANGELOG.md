@@ -2,6 +2,12 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.11.1 - 2026-10-29
+
+### Changed
+
+- Move to `agentic-design` 0.8.x. The package depends on `^0.8.0` now, so it installs next to the other `agentic-*` packages without an `ERESOLVE` error. Two design changes reach the UI. The builder tabs use a roving tab index: Tab lands on the active tab, and the arrow keys move between tabs. The top bar no longer makes the page scroll sideways on a narrow screen. The screenshots in `docs/screenshots` are regenerated. No public API changes.
+
 ## 0.11.0 - 2026-10-29
 
 ### Added

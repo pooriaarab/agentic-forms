@@ -1,6 +1,6 @@
 // The operations every face shares: SDK, CLI, MCP, and HTTP API call these.
-import { formSpecSchema, questionSchema, type FormSpec } from "./core/schema.js";
-import { validateForm, type Answers, type Form } from "./core/form.js";
+import { formSpecSchema, formUpdateSchema, questionSchema, type FormSpec } from "./core/schema.js";
+import { validateForm, type Answers, type Form, type Question, type Section } from "./core/form.js";
 import { FormError, createFormRepo } from "./core/repo.js";
 import { purgeRateLimits } from "./core/rate-limit.js";
 import { backfillOwners } from "./core/backfill.js";
@@ -12,6 +12,29 @@ export class OpsError extends Error {
     super(message);
     this.name = "OpsError";
   }
+}
+
+export type MadeBy = "human" | "agent";
+
+const canon = (value: unknown): string =>
+  JSON.stringify(value, (_key, v: unknown) => (v !== null && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v));
+
+/**
+ * Sets `madeBy` on every question. A new or changed question takes `by`. An
+ * unchanged one keeps its old mark. A mark that came in with the input is never trusted.
+ */
+export function markQuestions<S extends { questions: Question[] }>(before: Form | null, sections: S[], by?: MadeBy): S[] {
+  const old = new Map<string, Question>();
+  for (const section of before?.sections ?? []) for (const q of section.questions) old.set(q.id, q);
+  const rest = ({ madeBy: _drop, ...q }: Question): Omit<Question, "madeBy"> => (q.rules !== undefined && Object.keys(q.rules).length === 0 ? { ...q, rules: undefined } : q);
+  return sections.map((section) => ({
+    ...section,
+    questions: section.questions.map((q) => {
+      const prior = old.get(q.id);
+      const kept = prior !== undefined && canon(rest({ ...prior, required: prior.required ?? false })) === canon(rest({ ...q, required: q.required ?? false })) ? prior.madeBy : by;
+      return { ...rest(q), ...(kept === undefined ? {} : { madeBy: kept }) } as Question;
+    }),
+  }));
 }
 
 export function createOps(store: Store) {
@@ -35,18 +58,34 @@ export function createOps(store: Store) {
     get,
     check,
     /** Makes a form from a JSON spec. Throws ZodError, FormError, or OpsError. */
-    async create(spec: unknown, publish = false): Promise<Form> {
+    async create(spec: unknown, publish = false, by?: MadeBy): Promise<Form> {
       const parsed = check(spec);
       if (await repo.get(parsed.id)) throw new OpsError("conflict", `form "${parsed.id}" already exists`);
-      const draft = await repo.save({ ...parsed, version: 1, status: "draft" });
+      const draft = await repo.save({ ...parsed, sections: markQuestions(null, parsed.sections as Section[], by), version: 1, status: "draft" });
       return publish ? repo.publish(draft.id) : draft;
     },
-    async addQuestion(formId: string, question: unknown, sectionId?: string): Promise<Form> {
+    async addQuestion(formId: string, question: unknown, sectionId?: string, by?: MadeBy): Promise<Form> {
       const form = await get(formId);
       const section = sectionId === undefined ? form.sections[0] : form.sections.find((s) => s.id === sectionId);
       if (!section) throw new OpsError("not_found", `section "${sectionId}" not found`);
-      const sections = form.sections.map((s) => (s === section ? { ...s, questions: [...s.questions, questionSchema.parse(question)] } : s));
-      return repo.save({ ...form, sections });
+      const sections = form.sections.map((s) => (s === section ? { ...s, questions: [...s.questions, questionSchema.parse(question) as Question] } : s));
+      // The save is a compare-and-set against the form just read, so the marks match what is stored.
+      return repo.save({ ...form, sections: markQuestions(form, sections, by) }, { expectedRevision: form.revision ?? 0 });
+    },
+    /**
+     * Replaces the title, notice, retention, and sections: this edits, reorders, and removes questions.
+     * Editing a published form starts a new draft version. `notice` and `retentionDays` stay as stored unless you send them (null removes one).
+     * With `expectedVersion` (a publish moved it) or `expectedRevision` (any save moved it), a head that moved is a VersionConflictError.
+     */
+    async update(formId: string, spec: unknown, by?: MadeBy): Promise<Form> {
+      const { expectedVersion, expectedRevision, notice, retentionDays, ...parsed } = formUpdateSchema.parse(spec);
+      const form = await get(formId);
+      const next = { ...form, ...parsed, sections: markQuestions(form, parsed.sections as Section[], by) } as Form;
+      // Absent keeps the stored value. null removes it, so a privacy setting never goes by omission.
+      if (notice !== undefined) notice === null ? delete next.notice : (next.notice = notice);
+      if (retentionDays !== undefined) retentionDays === null ? delete next.retentionDays : (next.retentionDays = retentionDays);
+      // Without an expectedRevision the save still checks the form it read, so a notice kept by omission is the one stored.
+      return repo.save(next, { expectedVersion, expectedRevision: expectedRevision ?? form.revision ?? 0 });
     },
     async publish(formId: string): Promise<Form> {
       await get(formId);

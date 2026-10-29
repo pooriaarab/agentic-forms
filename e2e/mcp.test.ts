@@ -27,7 +27,7 @@ afterAll(() => client.close());
 describe("mcp over stdio", () => {
   test("lists the tools", async () => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["add_question", "export_csv", "get_form", "list_responses", "new_form", "publish_form", "purge_all", "purge_expired", "submit_response"]);
+    expect(names).toEqual(["add_question", "export_csv", "get_form", "list_responses", "new_form", "publish_form", "purge_all", "purge_expired", "submit_response", "update_form"]);
   });
 
   test("a logic cycle, a duplicate id, a bad type, and a missing form are tool errors, not crashes", async () => {
@@ -46,6 +46,12 @@ describe("mcp over stdio", () => {
   test("make, extend, publish, submit, list, export", async () => {
     expect((await call("new_form", { ...spec("survey", [{ id: "name", type: "short_text", label: "Name", required: true }]), notice: "We store your name." })).error).toBe(false);
     expect((await call("add_question", { form: "survey", question: { id: "mood", type: "rating", label: "Mood" } })).error).toBe(false);
+    const edited = await call("update_form", { form: "survey", title: "Survey 2", notice: "We store your name.", sections: [{ id: "s", title: "S", questions: [{ id: "mood", type: "rating", label: "Mood" }, { id: "name", type: "short_text", label: "Name", required: true }] }] });
+    expect(edited.error).toBe(false);
+    const stale = await call("update_form", { form: "survey", title: "x", sections: [{ id: "s", title: "S", questions: [] }], expectedRevision: 0 });
+    expect(stale.error).toBe(true);
+    expect(stale.text).toContain("changed since revision");
+    expect(JSON.parse(edited.text).sections[0].questions.map((q: { id: string; madeBy: string }) => `${q.id}:${q.madeBy}`)).toEqual(["mood:agent", "name:agent"]);
     expect((await call("publish_form", { form: "survey" })).error).toBe(false);
     expect((await call("submit_response", { form: "survey", answers: { name: "Ada" } })).text).toContain("consent");
     expect((await call("submit_response", { form: "survey", answers: { name: "Ada", mood: 4 }, consent: true })).error).toBe(false);
@@ -53,6 +59,6 @@ describe("mcp over stdio", () => {
     const rows = JSON.parse((await call("list_responses", { form: "survey" })).text);
     expect(rows.items).toHaveLength(1);
     expect(rows.items[0]).toMatchObject({ values: { name: "Ada", mood: 4 }, consent: true });
-    expect((await call("export_csv", { form: "survey" })).text.split("\n")[0]).toBe("response_id,submitted_at,form_version,name,mood");
+    expect((await call("export_csv", { form: "survey" })).text.split("\n")[0]).toBe("response_id,submitted_at,form_version,mood,name");
   });
 });

@@ -3,7 +3,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { ZodError } from "zod";
 import { BackfillError } from "./core/backfill.js";
-import { FormError } from "./core/repo.js";
+import { FormError, VersionConflictError } from "./core/repo.js";
 import { createFileStore } from "./core/file-store.js";
 import type { Answers } from "./core/form.js";
 import { SubmitError } from "./core/responses.js";
@@ -21,6 +21,7 @@ Commands:
       [--required] [--choices a,b] [--show-if q:op[:value]] [--section <s>]
       [--min n] [--max n] [--min-length n] [--max-length n] [--pattern re]
   from-prompt --spec <file|-> [--publish]                      Make a form from a JSON spec.
+  update <id> --spec <file|->                                  Replace title, notice, and sections from JSON.
   publish <id>                                                 Open the form to answers.
   show <id>                                                    Print the form as JSON.
   submit <id> --answers <json> [--consent]                     Store one response.
@@ -32,6 +33,7 @@ Commands:
   mcp                                                          Start the MCP server on stdio.
 
 Flags:
+  --by <human|agent>   Mark the questions this command makes or changes. Default: no mark. A local file has no signed-in caller, so this is your own claim.
   --data <file>   Data file. Default: $AGENTIC_FORMS_DATA or ./agentic-forms.json.
   --help, -h      Print this help.
   --version, -V   Print the version.`;
@@ -81,6 +83,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       await startMcp(createFileStore(dataPath(flags)));
       return 0;
     }
+    const by = flags.by === undefined ? undefined : flags.by === "human" || flags.by === "agent" ? flags.by : (() => { throw new UsageError("--by is human or agent"); })();
     const ops = createOps(createFileStore(dataPath(flags)));
     const need = () => {
       if (id === undefined) throw new UsageError(`${command} needs a form id`);
@@ -93,7 +96,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
     };
     switch (command) {
       case "new":
-        out(JSON.stringify(await ops.create({ id: need(), title: str("title"), notice: flags.notice, retentionDays: num(flags, "retention-days"), sections: [{ id: "main", title: str("title"), questions: [] }] })));
+        out(JSON.stringify(await ops.create({ id: need(), title: str("title"), notice: flags.notice, retentionDays: num(flags, "retention-days"), sections: [{ id: "main", title: str("title"), questions: [] }] }, false, by)));
         return 0;
       case "add-question": {
         const choices = typeof flags.choices === "string" ? flags.choices.split(",") : undefined;
@@ -107,12 +110,17 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
           rules: Object.values(rules).some((v) => v !== undefined) ? rules : undefined,
           showIf: typeof flags["show-if"] === "string" ? showIf(flags["show-if"]) : undefined,
         };
-        out(JSON.stringify(await ops.addQuestion(need(), question, typeof flags.section === "string" ? flags.section : undefined)));
+        out(JSON.stringify(await ops.addQuestion(need(), question, typeof flags.section === "string" ? flags.section : undefined, by)));
         return 0;
       }
       case "from-prompt": {
         const spec = str("spec");
-        out(JSON.stringify(await ops.create(JSON.parse(readFileSync(spec === "-" ? 0 : spec, "utf8")), flags.publish === true)));
+        out(JSON.stringify(await ops.create(JSON.parse(readFileSync(spec === "-" ? 0 : spec, "utf8")), flags.publish === true, by)));
+        return 0;
+      }
+      case "update": {
+        const spec = str("spec");
+        out(JSON.stringify(await ops.update(need(), JSON.parse(readFileSync(spec === "-" ? 0 : spec, "utf8")), by)));
         return 0;
       }
       case "publish":
@@ -170,7 +178,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       return 2;
     }
     if (error instanceof ZodError) err(`error: ${error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`);
-    else if (error instanceof OpsError || error instanceof BackfillError || error instanceof FormError || error instanceof SubmitError || error instanceof SyntaxError) err(`error: ${error.message}`);
+    else if (error instanceof OpsError || error instanceof BackfillError || error instanceof FormError || error instanceof VersionConflictError || error instanceof SubmitError || error instanceof SyntaxError) err(`error: ${error.message}`);
     else throw error;
     return 1;
   }

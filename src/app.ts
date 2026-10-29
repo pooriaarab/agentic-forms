@@ -1,9 +1,9 @@
 import { Hono, type Context, type Next } from "hono";
 import { ZodError } from "zod";
 import { SubmitError } from "./core/responses.js";
-import { FormError } from "./core/repo.js";
+import { FormError, VersionConflictError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
-import { EraseRefusedError, MAX_AUDIT_PAGE, MAX_OWNERS_ON_ERASE, ROLES, SUBJECT_KINDS, createMemoryStore, createSharing, hasScope, migrateGrants, type Action, type Auth, type PrincipalContext, type Role, type Store, type SubjectKind } from "agentic-identity";
+import { EraseRefusedError, MAX_AUDIT_PAGE, MAX_OWNERS_ON_ERASE, ROLES, SUBJECT_KINDS, createMemoryStore, createSharing, hasScope, isMachineMade, migrateGrants, type Action, type Auth, type PrincipalContext, type Role, type Store, type SubjectKind } from "agentic-identity";
 import { clientKey, createRateLimiter } from "./core/rate-limit.js";
 import { BackfillError } from "./core/backfill.js";
 import { FORM_ID, SUBJECT_ID, wellFormedCursor } from "./core/schema.js";
@@ -13,6 +13,7 @@ import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
 const SUBJECT = SUBJECT_ID;
+const by = (ctx: PrincipalContext) => (isMachineMade(ctx.kind) ? "agent" : "human");
 const isSubjectKind = (kind: unknown): kind is SubjectKind => SUBJECT_KINDS.includes(kind as SubjectKind);
 const MAX_LIMIT = 1000;
 
@@ -133,7 +134,7 @@ export function createApp(options: AppOptions = {}) {
       const adopt = resource?.type === "form" && (await sharing.can(ctx, "admin", parsed.id)).allowed && !(await repo.get(parsed.id));
       if (!adopt) throw new OpsError("conflict", `form "${parsed.id}" already exists`);
     }
-    return c.json(await ops.create(parsed, publish === true), 201);
+    return c.json(await ops.create(parsed, publish === true, by(ctx)), 201);
   });
   // Lists the forms the caller's grants name. It reads the grants of the root of the chain,
   // so a list does not write one audit row per form. Scopes still narrow what an agent sees.
@@ -164,7 +165,12 @@ export function createApp(options: AppOptions = {}) {
   app.post(`${forms}/:id/questions`, async (c) => {
     await require(c, "write", c.req.param("id"));
     const { question, section } = await c.req.json();
-    return c.json(await ops.addQuestion(c.req.param("id"), question, section), 201);
+    return c.json(await ops.addQuestion(c.req.param("id"), question, section, by(c.get("ctx"))), 201);
+  });
+  // Replaces the draft: edit, reorder, or remove questions. A published form starts a new draft version.
+  app.put(`${forms}/:id`, async (c) => {
+    await require(c, "write", c.req.param("id"));
+    return c.json(await ops.update(c.req.param("id"), await c.req.json(), by(c.get("ctx"))));
   });
   app.post(`${forms}/:id/publish`, async (c) => {
     await require(c, "write", c.req.param("id"));
@@ -274,6 +280,7 @@ export function createApp(options: AppOptions = {}) {
   app.onError((error, c) => {
     if (error instanceof AccessError) return c.json({ error: error.status === 404 ? "not_found" : "forbidden" }, error.status);
     if (error instanceof OpsError) return c.json({ error: error.kind, message: error.message }, error.kind === "not_found" ? 404 : 409);
+    if (error instanceof VersionConflictError) return c.json({ error: "version_conflict", counts: error.counts, message: error.message }, 409);
     if (error instanceof EraseRefusedError) return c.json({ error: "conflict", message: error.message }, 409);
     if (error instanceof BackfillError) return c.json({ error: error.kind, message: error.message }, 400);
     if (error instanceof FormError || error instanceof SubmitError) return c.json({ error: "invalid", issues: error.issues }, 422);

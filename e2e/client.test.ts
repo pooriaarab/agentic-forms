@@ -44,8 +44,12 @@ describe("remote client against the Worker", () => {
     const spec = { id: "poll", title: "Poll", notice: "We keep answers.", sections: [{ id: "s", title: "S", questions: [{ id: "color", type: "single_choice" as const, label: "Color", required: true, choices: ["red", "blue"] }] }] };
     expect((await api.createForm(spec)).status).toBe("draft");
     await api.addQuestion("poll", { id: "note", type: "short_text", label: "Note" }, { section: "s" });
+    const edited = await api.updateForm("poll", { title: "Poll", notice: "We keep answers.", sections: [{ id: "s", title: "S", questions: [{ id: "note", type: "short_text", label: "Note" }, { id: "color", type: "single_choice", label: "Color", required: true, choices: ["red", "blue"] }] }], expectedVersion: 1 });
+    expect(edited.sections[0]!.questions.map((q) => q.id)).toEqual(["note", "color"]);
+    expect(edited.sections[0]!.questions.map((q) => q.madeBy)).toEqual(["agent", "agent"]);
+    expect(await caught(api.updateForm("poll", { title: "x", sections: edited.sections, expectedVersion: 7 }))).toMatchObject({ status: 409, code: "version_conflict" });
     expect((await api.publishForm("poll")).status).toBe("published");
-    expect((await api.getForm("poll")).sections[0]!.questions.map((q) => q.id)).toEqual(["color", "note"]);
+    expect((await api.getForm("poll")).sections[0]!.questions.map((q) => q.id)).toEqual(["note", "color"]);
     expect((await api.listForms()).map((f) => f.id)).toEqual(["poll"]);
 
     // The public submit sends no token. A missing consent is a typed 422.
@@ -58,7 +62,7 @@ describe("remote client against the Worker", () => {
     const page = await api.listResponses("poll", { limit: 1 });
     expect(page.items).toHaveLength(1);
     expect(page.items[0]).toMatchObject({ formId: "poll", consent: true, values: { color: "red", note: "hi" } });
-    expect((await api.exportCsv("poll")).split("\n")[0]).toBe("response_id,submitted_at,form_version,color,note");
+    expect((await api.exportCsv("poll")).split("\n")[0]).toBe("response_id,submitted_at,form_version,note,color");
     expect(await api.purge("poll")).toEqual({ purged: 0 });
 
     await api.share("poll", { subject: "ada", kind: "human", role: "viewer" });

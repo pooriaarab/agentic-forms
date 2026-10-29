@@ -13,8 +13,9 @@ export class FormError extends Error {
 
 /** The head moved since the caller read it. Read again and retry. */
 export class VersionConflictError extends Error {
-  constructor(readonly formId: string, readonly expected: number, readonly actual: number | null) {
-    super(`form "${formId}" is at version ${actual ?? "none"}, not ${expected}`);
+  /** What `expected` and `actual` count: the head's version, or its revision. */
+  constructor(readonly formId: string, readonly expected: number, readonly actual: number | null, message?: string, readonly counts: "version" | "revision" = "version") {
+    super(message ?? `form "${formId}" is at version ${actual ?? "none"}, not ${expected}`);
     this.name = "VersionConflictError";
   }
 }
@@ -57,7 +58,7 @@ export function createFormRepo(store: Store) {
      * compare-and-set: it throws VersionConflictError unless the head is still
      * at that version.
      */
-    async save(form: Form, options: { expectedVersion?: number } = {}): Promise<Form> {
+    async save(form: Form, options: { expectedVersion?: number; expectedRevision?: number } = {}): Promise<Form> {
       const issues = validateForm(form);
       if (issues.length > 0) throw new FormError(issues);
       return store.transaction(async (tx) => {
@@ -66,8 +67,13 @@ export function createFormRepo(store: Store) {
         if (expectedVersion !== undefined && head?.version !== expectedVersion) {
           throw new VersionConflictError(form.id, expectedVersion, head?.version ?? null);
         }
+        const { expectedRevision } = options;
+        // A caller that read the form has an erased head to fear too: it would come back from the dead.
+        if (expectedRevision !== undefined && (head === null || (head.revision ?? 0) !== expectedRevision)) {
+          throw new VersionConflictError(form.id, expectedRevision, head === null ? null : (head.revision ?? 0), `form "${form.id}" ${head === null ? "was erased" : `changed since revision ${expectedRevision}`}: read it again`, "revision");
+        }
         const version = head ? (head.status === "published" ? head.version + 1 : head.version) : 1;
-        const draft: Form = { ...form, version, status: "draft" };
+        const draft: Form = { ...form, version, status: "draft", revision: (head?.revision ?? 0) + 1 };
         await tx.put(HEADS, form.id, asDoc(draft));
         return draft;
       });
@@ -81,7 +87,7 @@ export function createFormRepo(store: Store) {
         const issues = validateForPublish(head);
         if (issues.length > 0) throw new FormError(issues);
         if ((await tx.get(VERSIONS, `${id}@${head.version}`)) !== null) throw new SnapshotExistsError(id, head.version);
-        const published: Form = { ...head, status: "published" };
+        const published: Form = { ...head, status: "published", revision: (head.revision ?? 0) + 1 };
         await tx.put(HEADS, id, asDoc(published));
         await tx.put(VERSIONS, `${id}@${head.version}`, asDoc(published));
         return published;

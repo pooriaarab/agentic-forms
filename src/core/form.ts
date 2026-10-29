@@ -38,6 +38,8 @@ export type Question = {
   choices?: string[];
   rules?: Rules;
   showIf?: Condition;
+  /** Who made or last changed this question. The server sets it from the caller; a caller cannot. Unset when unknown. */
+  madeBy?: "human" | "agent";
 };
 
 export type Section = {
@@ -57,6 +59,8 @@ export type Form = {
   /** Days to keep each response. Unset keeps responses until you delete them. */
   retentionDays?: number;
   sections: Section[];
+  /** Counts every save of the head, a draft edit too. Unset on forms made before it existed: read it as 0. `expectedRevision` compares against it. */
+  revision?: number;
 };
 
 /** A file answer is a blob key. */

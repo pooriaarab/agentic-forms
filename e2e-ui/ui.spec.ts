@@ -37,7 +37,9 @@ const addQuestion = async (page: Page, label: string, type: string, extra?: (dia
   // Focus goes back to the control that opened the dialog.
   await expect(page.getByRole("button", { name: /^Add question/ })).toBeFocused();
 };
-const questionNames = (page: Page) => page.getByRole("list", { name: /^Questions in/ }).locator(".af-item__label").allTextContents();
+const questionNames = (page: Page) => page.getByRole("list", { name: /^Questions in/ }).locator(".af-item__label");
+// Waits for the list: a Reload or a save re-renders it, and a read before that sees no items.
+const expectQuestions = (page: Page, names: string[]) => expect(questionNames(page)).toHaveText(names);
 
 test("sign in, build a form, publish, fill it by link, read the response, reload", async ({ page, browser }) => {
   const csp = cspErrors(page);
@@ -78,16 +80,16 @@ test("sign in, build a form, publish, fill it by link, read the response, reload
     await d.getByLabel("Choices").fill("red\nblue");
   });
   await addQuestion(page, "Throwaway", "number");
-  expect(await questionNames(page)).toEqual(["Your name", "Favorite color", "Throwaway"]);
+  await expectQuestions(page, ["Your name", "Favorite color", "Throwaway"]);
 
   // Edit, reorder, and remove.
   await page.getByRole("button", { name: "Edit: Throwaway" }).click();
   await page.getByRole("dialog", { name: "Edit question" }).getByLabel("Question", { exact: true }).fill("Team size");
   await page.getByRole("button", { name: "Save question" }).click();
   await page.getByRole("button", { name: "Move up: Team size" }).click();
-  expect(await questionNames(page)).toEqual(["Your name", "Team size", "Favorite color"]);
+  await expectQuestions(page, ["Your name", "Team size", "Favorite color"]);
   await page.getByRole("button", { name: "Remove: Team size" }).click();
-  expect(await questionNames(page)).toEqual(["Your name", "Favorite color"]);
+  await expectQuestions(page, ["Your name", "Favorite color"]);
   await expect(page.getByRole("button", { name: /^Add question/ })).toBeFocused(); // the removed row's button is gone: focus moved on
   await expect(page.getByText("You have unsaved changes.")).toBeVisible();
   // Leaving with unsaved edits asks first. Say no: the page stays.
@@ -143,7 +145,7 @@ test("sign in, build a form, publish, fill it by link, read the response, reload
   await page.reload();
   await expect(page.getByRole("cell", { name: "Grace" })).toBeVisible();
   await page.getByRole("tab", { name: "Questions" }).click();
-  expect(await questionNames(page)).toEqual(["Your name", "Favorite color"]);
+  await expectQuestions(page, ["Your name", "Favorite color"]);
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "All forms" }).click();
   await expect(page.getByRole("link", { name: "Team survey" })).toBeVisible();
   await audit(page, "10-forms-list");
@@ -181,7 +183,7 @@ test("an edit made elsewhere is refused, and nothing is overwritten", async ({ p
   await expect(page.getByRole("alert")).toContainText("Someone changed this form");
   await page.getByRole("button", { name: "Reload the form" }).click();
   await expect(page.getByRole("heading", { name: "Race", level: 1 })).toBeVisible();
-  expect(await questionNames(page)).toEqual(["one", "two"]);
+  await expectQuestions(page, ["one", "two"]);
 });
 
 test("publish refuses a draft that an agent changed after the page loaded it", async ({ page, request }) => {
@@ -198,7 +200,7 @@ test("publish refuses a draft that an agent changed after the page loaded it", a
   // Nothing went live: the public page says the form is not available.
   expect((await request.get(`/f/${id}`)).status()).toBe(404);
   await page.getByRole("button", { name: "Reload the form" }).click();
-  expect(await questionNames(page)).toEqual(["one", "home address"]);
+  await expectQuestions(page, ["one", "home address"]);
 });
 
 test("a condition on a rating compares numbers, so the follow-up shows for the right answer", async ({ page }) => {

@@ -7,7 +7,7 @@
 
 Build forms and collect answers into tables.
 
-> Status: early release, version 0.7.0. The library, CLI, MCP server, and Worker work. The API can still change before 1.0.
+> Status: early release, version 0.8.0. The library, CLI, MCP server, and Worker work. The API can still change before 1.0.
 
 ## Install
 
@@ -15,7 +15,7 @@ Build forms and collect answers into tables.
 npm install agentic-forms
 ```
 
-It needs Node 22 or newer. It depends on `agentic-identity` 0.7.x and `agentic-design` 0.3.x.
+It needs Node 22 or newer. It depends on `agentic-identity` 0.7.x and `agentic-design` 0.4.x.
 
 ## Quick start
 

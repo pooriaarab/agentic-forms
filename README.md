@@ -273,6 +273,22 @@ the token. The share link of a form points at `baseUrl`. The pages follow the ad
 - A pattern rule uses RE2 syntax and runs in linear time. Backreferences and lookaround are refused. A pattern has up to 256 characters, and a text with a pattern rule has up to 1000.
 - `exportCsv` holds every response in memory. Use it for forms with up to a few thousand responses.
 
+## Run locally
+
+```sh
+git clone https://github.com/pooriaarab/agentic-forms
+cd agentic-forms
+npm install && npm run dev
+```
+
+`bun install && bun run dev` works too. The `dev` script builds the UI, writes a git-ignored `.dev.vars` with a random `FORMS_RATE_SECRET` if none exists (the Worker needs one; see `.dev.vars.example`), then starts `wrangler dev` on <http://localhost:8792>. Wrangler keeps a local D1 database and sends no telemetry.
+
+```sh
+curl -i http://localhost:8792/health   # 200
+```
+
+`npm run dev:smoke` does the same check by itself: it starts the dev server, waits for `/health` to answer 200, and stops the server. CI runs it as the "dev smoke" step. Each agentic package uses its own default port, so two dev servers can run side by side. To use another port, run `npx wrangler dev --port <n>`.
+
 ## Develop
 
 ```sh

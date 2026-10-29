@@ -128,7 +128,32 @@ WRANGLER_SEND_METRICS=false npx wrangler dev --local \
 
 Open `http://127.0.0.1:8787/ui/` and sign in with the value you gave `FORMS_API_TOKEN`. Run the browser tests with `npm run test:ui`: Playwright starts `wrangler dev`, builds a form, fills it by its link, reads the response, reloads, and runs an axe WCAG 2.2 AA scan on every view in light and dark. Screenshots of each view in both schemes are in `docs/screenshots/`. They are rewritten on each run.
 
-The UI is not in the npm package. Deploy it from a checkout with `npm run build:ui && wrangler deploy`. A file upload question shows in the builder, but the form page cannot take files yet. The UI makes no request to another site, and it loads its fonts from the Worker.
+The Worker UI bundle is not in the npm package. The `agentic-forms/ui` export is. Deploy the Worker UI from a checkout with `npm run build:ui && wrangler deploy`. A file upload question shows in the builder, but the form page cannot take files yet. The UI makes no request to another site, and it loads its fonts from the Worker.
+
+### Mount the UI in your app
+
+`agentic-forms/ui` renders the same pages inside your own page. It needs no framework in your app. You give it an
+element, the Worker base URL, and a function that returns the token. `mount` returns a handle.
+
+```ts
+import { mount } from "agentic-forms/ui";
+import "agentic-design/styles.css";
+import "agentic-forms/ui.css";
+
+const forms = mount(document.getElementById("forms")!, {
+  baseUrl: "https://forms.example.com",
+  getToken: () => session.token(), // called before each request, so a host can refresh it
+});
+
+forms.update({ baseUrl: "https://other.example.com", getToken }); // point it at another Worker
+forms.unmount(); // remove the UI
+```
+
+`getToken` may return a promise. An empty token, or a refused call, shows as an error in the UI. A missing
+`getToken` or a bad `baseUrl` throws a `TypeError` and renders nothing. The server still checks every call against
+the token. The share link of a form points at the origin of `baseUrl`. The pages follow the address hash
+(`#/forms/<id>`), so they own that hash while mounted. `react` and `react-dom` (version 19) are peer dependencies.
+`createClient` from `agentic-forms/client` also accepts a function for `token`.
 
 ## Features
 

@@ -15,7 +15,7 @@ const icon = (d: string) => (
 );
 const ICONS = { up: icon("M8 13V3M4 7l4-4 4 4"), down: icon("M8 3v10M4 9l4 4 4-4"), edit: icon("M3 13l1-3 7-7 2 2-7 7z"), remove: icon("M4 4l8 8M12 4l-8 8") };
 
-function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: () => void }) {
+function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; reload: () => void; origin: string }) {
   const [form, setForm] = useState(initial);
   const [title, setTitle] = useState(initial.title);
   const [sections, setSections] = useState<Section[]>(initial.sections);
@@ -90,7 +90,7 @@ function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: 
       setBusy(undefined);
     }
   };
-  const link = `${location.origin}/f/${encodeURIComponent(form.id)}`;
+  const link = `${origin}/f/${encodeURIComponent(form.id)}`;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(link);
@@ -212,12 +212,13 @@ function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: 
 
 const tabValue = () => /\/(preview|responses)$/.exec(location.hash)?.[1] ?? "questions";
 
-export function Builder({ api, formId }: { api: Client; formId: string }) {
+/** `origin` is where the public fill link points: the Worker origin. */
+export function Builder({ api, formId, origin = location.origin }: { api: Client; formId: string; origin?: string }) {
   const [load, reload] = useLoad((signal) => api.getForm(formId, { signal }), formId);
   // The hash changes with the tab, so a re-render reads the current tab.
   return (
     <Gate load={load} what="the form" reload={reload}>
-      {(form) => <Editor key={`${form.id}-${form.version}-${form.revision ?? 0}`} api={api} initial={form} reload={reload} />}
+      {(form) => <Editor key={`${form.id}-${form.version}-${form.revision ?? 0}`} api={api} initial={form} reload={reload} origin={origin} />}
     </Gate>
   );
 }

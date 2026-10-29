@@ -2,6 +2,11 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## Unreleased
+
+- Add `agentic-forms/ui`. `mount(element, { baseUrl, getToken })` renders the forms pages into an element and returns `update` and `unmount`. `agentic-forms/ui.css` holds its styles. `react` and `react-dom` 19 are optional peer dependencies, and `agentic-design` is now a dependency.
+- `createClient` takes a function for `token`. It is called before each request.
+
 ## 0.4.0 - 2026-10-29
 
 No breaking changes. The new options and fields are optional.

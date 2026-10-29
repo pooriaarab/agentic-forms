@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, IconButton, Input, Tabs, useToast } from "agentic-design/react";
 import type { Client } from "../src/client.js";
 import type { Form, Question, Section } from "../src/core/form.js";
 import { Preview } from "./Preview.js";
 import { QuestionDialog, typeLabel } from "./QuestionDialog.js";
 import { Responses } from "./Responses.js";
-import { AgentMark, ErrorBox, Gate, None, useLoad } from "./lib.js";
+import { AgentMark, ErrorBox, Gate, None, canon, isConflict, setUnsaved, useLoad } from "./lib.js";
 
 type Edit = { section: number; index: number | "new" };
 const icon = (d: string) => (
@@ -20,23 +20,45 @@ function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: 
   const [title, setTitle] = useState(initial.title);
   const [sections, setSections] = useState<Section[]>(initial.sections);
   const [edit, setEdit] = useState<Edit | undefined>();
+  const [opener, setOpener] = useState<HTMLElement | null>(null);
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState<"save" | "publish" | undefined>();
   const toast = useToast();
-  const dirty = title !== form.title || JSON.stringify(sections) !== JSON.stringify(form.sections);
+  const dirty = title !== form.title || canon(sections) !== canon(form.sections);
   useEffect(() => {
+    setUnsaved(dirty);
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
     addEventListener("beforeunload", warn);
-    return () => removeEventListener("beforeunload", warn);
+    return () => {
+      removeEventListener("beforeunload", warn);
+      setUnsaved(false);
+    };
   }, [dirty]);
+  // A change moves or removes the control that had focus. This puts focus back on a control that is still there.
+  const root = useRef<HTMLDivElement>(null);
+  const [refocus, setRefocus] = useState<{ label: string } | undefined>();
+  useEffect(() => {
+    if (!refocus) return;
+    const buttons = [...(root.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    const target = buttons.find((b) => b.getAttribute("aria-label") === refocus.label && !b.disabled) ?? buttons.find((b) => b.textContent?.startsWith("Add question"));
+    target?.focus();
+    setRefocus(undefined);
+  }, [refocus, sections]);
+  const closeDialog = (opener: HTMLElement | null) => {
+    setEdit(undefined);
+    // Radix has no trigger to give focus back to, so the opener gets it.
+    requestAnimationFrame(() => (opener?.isConnected ? opener : root.current?.querySelector<HTMLButtonElement>("button[data-add]"))?.focus());
+  };
 
   const flat = sections.flatMap((s) => s.questions);
   const patch = (si: number, questions: Question[]) => setSections((all) => all.map((s, i) => (i === si ? { ...s, questions } : s)));
   const move = (si: number, qi: number, by: -1 | 1) => {
     const list = [...sections[si]!.questions];
+    const label = list[qi]!.label;
     [list[qi], list[qi + by]] = [list[qi + by]!, list[qi]!];
     patch(si, list);
+    setRefocus({ label: `Move ${by === -1 ? "up" : "down"}: ${label}` });
   };
   // Save sends the whole draft. The server marks each new or changed question by who the caller is.
   const save = async (): Promise<Form | undefined> => {
@@ -59,7 +81,8 @@ function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: 
     if (!saved) return;
     setBusy("publish");
     try {
-      setForm(await api.publishForm(form.id));
+      // The revision of what this page shows: a draft that changed elsewhere since is refused, not published unseen.
+      setForm(await api.publishForm(form.id, { expectedRevision: saved.revision ?? 0 }));
       toast({ title: "Published", description: "The form is open to answers.", tone: "success" });
     } catch (e) {
       setError(e);
@@ -78,7 +101,8 @@ function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: 
   };
   const openDraft = form.status === "draft" && form.version > 1;
   const editing = edit && (edit.index === "new" ? undefined : sections[edit.section]!.questions[edit.index]);
-  const earlier = edit === undefined ? [] : edit.index === "new" ? flat : flat.slice(0, flat.indexOf(editing!));
+  // A condition reads an earlier question: for a new one, any question up to the end of its section.
+  const earlier = edit === undefined ? [] : edit.index === "new" ? sections.slice(0, edit.section + 1).flatMap((s) => s.questions) : flat.slice(0, flat.indexOf(editing!));
 
   const builder = (
     <div className="af-stack">
@@ -106,15 +130,15 @@ function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: 
                   <div className="af-row">
                     <IconButton label={`Move up: ${q.label}`} icon={ICONS.up} size="sm" disabled={qi === 0} onClick={() => move(si, qi, -1)} />
                     <IconButton label={`Move down: ${q.label}`} icon={ICONS.down} size="sm" disabled={qi === s.questions.length - 1} onClick={() => move(si, qi, 1)} />
-                    <IconButton label={`Edit: ${q.label}`} icon={ICONS.edit} size="sm" onClick={() => setEdit({ section: si, index: qi })} />
-                    <IconButton label={`Remove: ${q.label}`} icon={ICONS.remove} size="sm" variant="danger" onClick={() => patch(si, s.questions.filter((_, i) => i !== qi))} />
+                    <IconButton label={`Edit: ${q.label}`} icon={ICONS.edit} size="sm" onClick={(e) => (setOpener(e.currentTarget), setEdit({ section: si, index: qi }))} />
+                    <IconButton label={`Remove: ${q.label}`} icon={ICONS.remove} size="sm" variant="danger" onClick={() => (patch(si, s.questions.filter((_, i) => i !== qi)), setRefocus({ label: "" }))} />
                   </div>
                 </li>
               ))}
             </ol>
           )}
           <div>
-            <Button onClick={() => setEdit({ section: si, index: "new" })}>Add question{sections.length > 1 ? ` to ${s.title}` : ""}</Button>
+            <Button data-add="" onClick={(e) => (setOpener(e.currentTarget), setEdit({ section: si, index: "new" }))}>Add question{sections.length > 1 ? ` to ${s.title}` : ""}</Button>
           </div>
         </section>
       ))}
@@ -122,7 +146,7 @@ function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: 
   );
 
   return (
-    <div className="af-stack">
+    <div className="af-stack" ref={root}>
       <div className="af-row af-row--between">
         <div>
           <h1 className="af-title">{form.title}</h1>
@@ -141,7 +165,7 @@ function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: 
       <p role="status" className="af-muted" style={{ margin: 0 }}>
         {dirty ? "You have unsaved changes." : openDraft ? "Saved. This draft is not published: people still see version " + (form.version - 1) + "." : "All changes saved."}
       </p>
-      {error !== undefined && <ErrorBox error={error} onRetry={reload} retry={<Button onClick={reload}>Reload the form</Button>} />}
+      {error !== undefined && <ErrorBox error={error} onRetry={isConflict(error) ? reload : undefined} retry={<Button onClick={reload}>Reload the form</Button>} />}
       {form.status === "published" || form.version > 1 ? (
         <div className="af-card af-row af-row--between">
           <div>
@@ -172,13 +196,13 @@ function Editor({ api, initial, reload }: { api: Client; initial: Form; reload: 
           question={editing}
           earlier={earlier}
           taken={flat.map((q) => q.id)}
-          onOpenChange={(open) => !open && setEdit(undefined)}
+          onOpenChange={(open) => !open && closeDialog(opener)}
           onSave={(q) => {
             const list = [...sections[edit.section]!.questions];
             if (edit.index === "new") list.push(q);
             else list[edit.index] = q;
             patch(edit.section, list);
-            setEdit(undefined);
+            closeDialog(opener);
           }}
         />
       )}

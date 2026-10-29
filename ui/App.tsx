@@ -3,12 +3,26 @@ import { AppShell, Button, Input, Select, SidebarNav, useTheme } from "agentic-d
 import { ApiError } from "../src/client.js";
 import { Builder } from "./Builder.js";
 import { FormList } from "./FormList.js";
-import { ErrorBox, getToken, makeClient, setToken } from "./lib.js";
+import { ErrorBox, confirmLeave, getToken, makeClient, setToken } from "./lib.js";
+
+const formOf = (hash: string) => /^#\/forms\/([^/]+)/.exec(hash)?.[1];
 
 const useHash = () => {
   const [hash, setHash] = useState(location.hash);
   useEffect(() => {
-    const on = () => setHash(location.hash);
+    let undoing = false;
+    const on = (e: HashChangeEvent) => {
+      // The event of our own step back is not a move.
+      if (undoing) return void (undoing = false);
+      const from = new URL(e.oldURL).hash;
+      // Moving to another page with unsaved edits asks first. Moving between the tabs of one form does not.
+      if (formOf(from) !== formOf(location.hash) && !confirmLeave()) {
+        undoing = true;
+        location.hash = from;
+        return;
+      }
+      setHash(location.hash);
+    };
     addEventListener("hashchange", on);
     return () => removeEventListener("hashchange", on);
   }, []);
@@ -75,7 +89,7 @@ export function App() {
             <option value="light">Theme: light</option>
             <option value="dark">Theme: dark</option>
           </Select>
-          <Button size="sm" onClick={() => (setToken(""), setTok(""))}>
+          <Button size="sm" onClick={() => confirmLeave() && (setToken(""), setTok(""))}>
             Sign out
           </Button>
         </>

@@ -1,5 +1,5 @@
 import { Hono, type Context, type Next } from "hono";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { SubmitError } from "./core/responses.js";
 import { FormError, VersionConflictError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
@@ -13,6 +13,7 @@ import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
 const SUBJECT = SUBJECT_ID;
+const publishBody = z.object({ expectedRevision: z.number().int().min(0).optional() }).strict();
 const by = (ctx: PrincipalContext) => (isMachineMade(ctx.kind) ? "agent" : "human");
 const isSubjectKind = (kind: unknown): kind is SubjectKind => SUBJECT_KINDS.includes(kind as SubjectKind);
 const MAX_LIMIT = 1000;
@@ -27,6 +28,8 @@ class AccessError extends Error {
 }
 
 export interface AppOptions {
+  /** Set it when the static UI is served next to the app: `GET /` then goes to /ui/. */
+  ui?: boolean;
   store?: Store;
   /** Names the caller of /api/v1 from the request. With no `auth` the API answers 503. There is no default. */
   auth?: Auth;
@@ -56,7 +59,8 @@ export function createApp(options: AppOptions = {}) {
     options.rateLimit === false ? undefined : createRateLimiter(store, options.rateLimit ?? { limit: 20, windowMs: 60_000 }, options.rateLimitSecret as string, now);
 
   const app = new Hono<{ Variables: { ctx: PrincipalContext } }>();
-  app.get("/", (c) => c.redirect("/ui/"));
+  // Only a deployment that serves the UI assets sends people there.
+  if (options.ui === true) app.get("/", (c) => c.redirect("/ui/"));
   app.get("/health", (c) => c.json({ ok: true, version: VERSION }));
 
   // A malformed id never reaches the store, which would throw on it.
@@ -175,7 +179,10 @@ export function createApp(options: AppOptions = {}) {
   });
   app.post(`${forms}/:id/publish`, async (c) => {
     await require(c, "write", c.req.param("id"));
-    return c.json(await ops.publish(c.req.param("id")));
+    // The body is optional: { expectedRevision } makes the publish refuse a draft that changed since the caller read it.
+    const text = await c.req.text();
+    const options = text.trim() === "" ? {} : publishBody.parse(JSON.parse(text));
+    return c.json(await ops.publish(c.req.param("id"), options));
   });
   // Answers hold personal data, so reading them needs an editor.
   app.get(`${forms}/:id/responses`, async (c) => {

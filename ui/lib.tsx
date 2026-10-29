@@ -90,3 +90,13 @@ export function AgentMark({ what }: { what: string }) {
     </span>
   );
 }
+
+/** JSON with sorted keys, so two questions with the same fields compare equal. */
+export const canon = (value: unknown): string =>
+  JSON.stringify(value, (_k, v: unknown) => (v !== null && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v));
+
+// The open builder says whether it holds unsaved edits, so a move to another page can ask first.
+let unsaved = false;
+export const setUnsaved = (value: boolean) => (unsaved = value);
+export const confirmLeave = () => !unsaved || confirm("You have unsaved changes. Leave and lose them?");
+export const isConflict = (error: unknown) => error instanceof ApiError && error.code === "version_conflict";

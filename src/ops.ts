@@ -87,9 +87,10 @@ export function createOps(store: Store) {
       // Without an expectedRevision the save still checks the form it read, so a notice kept by omission is the one stored.
       return repo.save(next, { expectedVersion, expectedRevision: expectedRevision ?? form.revision ?? 0 });
     },
-    async publish(formId: string): Promise<Form> {
+    /** With `expectedRevision`, a draft that changed since you read it is a VersionConflictError and is not published. */
+    async publish(formId: string, options: { expectedRevision?: number } = {}): Promise<Form> {
       await get(formId);
-      return repo.publish(formId);
+      return repo.publish(formId, options);
     },
     async submit(formId: string, answers: Answers, consent = false) {
       await get(formId);

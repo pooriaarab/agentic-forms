@@ -106,6 +106,15 @@ describe("ops.update", () => {
     expect(ids(await ops.get("f"))).toEqual(["a"]);
   });
 
+  test("publish with a stale expectedRevision is refused, and the draft stays a draft", async () => {
+    const ops = createOps(createMemoryStore());
+    const read = await ops.create({ id: "f", ...spec([q("a")]) });
+    await ops.update("f", spec([q("a"), q("secret")])); // someone else edits after the read
+    await expect(ops.publish("f", { expectedRevision: read.revision })).rejects.toThrow(/before you publish/);
+    expect((await ops.get("f")).status).toBe("draft");
+    expect((await ops.publish("f", { expectedRevision: (await ops.get("f")).revision })).status).toBe("published");
+  });
+
   test("an unknown form is not_found", async () => {
     await expect(createOps(createMemoryStore()).update("none", spec([q("a")]))).rejects.toMatchObject({ kind: "not_found" });
   });
@@ -125,6 +134,20 @@ describe("PUT /api/v1/forms/:id", () => {
     await human.request("/api/v1/forms/f/shares", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer x" }, body: JSON.stringify({ subject: "p", kind: "agent", role: "editor" }) });
     const agent = createApp({ store, auth: as("agent"), rateLimit: false });
     expect(marks((await (await put(agent, spec([q("a"), q("b", { label: "B" })]))).json()) as never)).toEqual({ a: "human", b: "agent" });
+  });
+
+  test("POST publish takes an optional body: a stale revision is 409, a bad body is 400, no body publishes", async () => {
+    const store = createMemoryStore();
+    const app = createApp({ store, auth: as("human", "ada"), rateLimit: false });
+    const json = { "content-type": "application/json", authorization: "Bearer x" };
+    await app.request("/api/v1/forms", { method: "POST", headers: json, body: JSON.stringify({ id: "f", ...spec([q("a")]) }) });
+    const publish = (body?: unknown) => app.request("/api/v1/forms/f/publish", { method: "POST", headers: json, body: body === undefined ? undefined : JSON.stringify(body) });
+    const stale = await publish({ expectedRevision: 5 });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({ error: "version_conflict", counts: "revision" });
+    expect((await publish({ expectedRevision: "x" })).status).toBe(400);
+    expect((await publish({ other: 1 })).status).toBe(400);
+    expect((await publish()).status).toBe(200);
   });
 
   test("a viewer is refused with 403", async () => {

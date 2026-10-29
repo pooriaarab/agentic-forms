@@ -22,7 +22,7 @@ Commands:
       [--min n] [--max n] [--min-length n] [--max-length n] [--pattern re]
   from-prompt --spec <file|-> [--publish]                      Make a form from a JSON spec.
   update <id> --spec <file|->                                  Replace title, notice, and sections from JSON.
-  publish <id>                                                 Open the form to answers.
+  publish <id> [--expected-revision n]                         Open the form to answers.
   show <id>                                                    Print the form as JSON.
   submit <id> --answers <json> [--consent]                     Store one response.
   responses <id> [--limit n] [--cursor c]                      Print responses as JSON.
@@ -124,7 +124,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
         return 0;
       }
       case "publish":
-        out(JSON.stringify(await ops.publish(need())));
+        out(JSON.stringify(await ops.publish(need(), { expectedRevision: num(flags, "expected-revision") })));
         return 0;
       case "show":
         out(JSON.stringify(await ops.get(need())));

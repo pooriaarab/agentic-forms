@@ -16,7 +16,11 @@ export const TYPES: { value: QuestionType; label: string }[] = [
 ];
 export const typeLabel = (type: QuestionType) => TYPES.find((t) => t.value === type)?.label ?? type;
 const HAS_CHOICES: QuestionType[] = ["single_choice", "multi_choice", "dropdown"];
-const OPS: Condition["op"][] = ["answered", "equals", "not_equals", "contains", "gt", "lt"];
+const NUMERIC: QuestionType[] = ["number", "rating"];
+const CHOICES: QuestionType[] = ["single_choice", "multi_choice", "dropdown"];
+// The server compares a number answer with a number and a text answer with text, so the value takes the type of the question it reads.
+const opsFor = (source?: Question): Condition["op"][] =>
+  source && NUMERIC.includes(source.type) ? ["answered", "equals", "not_equals", "gt", "lt"] : source?.type === "multi_choice" ? ["answered", "contains", "equals", "not_equals"] : ["answered", "equals", "not_equals", "contains"];
 const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
 const num = (text: string) => (text.trim() === "" || !Number.isFinite(Number(text)) ? undefined : Number(text));
 
@@ -47,6 +51,9 @@ export function QuestionDialog({ question, earlier, taken, open, onOpenChange, o
   const [condOp, setCondOp] = useState<Condition["op"]>(question?.showIf?.op ?? "answered");
   const [condValue, setCondValue] = useState(String(question?.showIf?.value ?? ""));
   const [tried, setTried] = useState(false);
+  const source = earlier.find((q) => q.id === condQ);
+  const numeric = source !== undefined && NUMERIC.includes(source.type);
+  const needsValue = condQ !== "" && condOp !== "answered";
 
   const shownId = question ? question.id : idTouched ? id : slug(label);
   const list = choices.split("\n").map((c) => c.trim()).filter(Boolean);
@@ -54,6 +61,7 @@ export function QuestionDialog({ question, earlier, taken, open, onOpenChange, o
     label: label.trim() === "" ? "Write the question." : undefined,
     id: shownId === "" ? "Give the question an id." : taken.includes(shownId) && shownId !== question?.id ? "Another question has this id." : undefined,
     choices: HAS_CHOICES.includes(type) && list.length === 0 ? "Add at least one choice, one per line." : undefined,
+    value: needsValue && (condValue.trim() === "" || (numeric && !Number.isFinite(Number(condValue)))) ? (numeric ? "Give a number." : "Give a value.") : undefined,
   };
   const bad = Object.values(errors).some(Boolean);
   const submit = (event: FormEvent) => {
@@ -65,9 +73,9 @@ export function QuestionDialog({ question, earlier, taken, open, onOpenChange, o
         ? { min: num(min), max: num(max) }
         : type === "short_text" || type === "long_text" ? { minLength: num(minLength), maxLength: num(maxLength) } : {};
     const kept = Object.fromEntries(Object.entries(rules).filter(([, v]) => v !== undefined));
-    const showIf: Condition | undefined = condQ === "" ? undefined : { question: condQ, op: condOp, ...(condOp === "answered" ? {} : { value: condOp === "gt" || condOp === "lt" ? Number(condValue) : condValue }) };
-    // madeBy is not sent: the server sets it from the caller.
-    const next: Question = { id: shownId, type, label: label.trim(), required, ...(HAS_CHOICES.includes(type) ? { choices: list } : {}), ...(Object.keys(kept).length > 0 ? { rules: kept } : {}), ...(showIf ? { showIf } : {}) };
+    const showIf: Condition | undefined = condQ === "" ? undefined : { question: condQ, op: condOp, ...(condOp === "answered" ? {} : { value: numeric ? Number(condValue) : condValue }) };
+    // madeBy is kept as it was and is not trusted: the server sets it from the caller.
+    const next: Question = { ...(question?.madeBy ? { madeBy: question.madeBy } : {}), id: shownId, type, label: label.trim(), required, ...(HAS_CHOICES.includes(type) ? { choices: list } : {}), ...(Object.keys(kept).length > 0 ? { rules: kept } : {}), ...(showIf ? { showIf } : {}) };
     onSave(next);
   };
   const show = (e: string | undefined) => (tried ? e : undefined);
@@ -106,8 +114,18 @@ export function QuestionDialog({ question, earlier, taken, open, onOpenChange, o
         )}
         <fieldset className="af-fieldset af-stack">
           <legend>Show only when</legend>
-          <Select label="Earlier question" value={condQ} onChange={(e) => setCondQ(e.target.value)} hint={earlier.length === 0 ? "No earlier question yet." : undefined}>
+          <Select
+            label="Earlier question"
+            value={condQ}
+            onChange={(e) => {
+              setCondQ(e.target.value);
+              setCondOp("answered");
+              setCondValue("");
+            }}
+            hint={earlier.length === 0 ? "No earlier question yet." : undefined}
+          >
             <option value="">Always show</option>
+            {condQ !== "" && source === undefined && <option value={condQ}>{condQ} (not an earlier question: the server will refuse it)</option>}
             {earlier.map((q) => (
               <option key={q.id} value={q.id}>
                 {q.label}
@@ -117,13 +135,23 @@ export function QuestionDialog({ question, earlier, taken, open, onOpenChange, o
           {condQ !== "" && (
             <>
               <Select label="Condition" value={condOp} onChange={(e) => setCondOp(e.target.value as Condition["op"])}>
-                {OPS.map((op) => (
+                {opsFor(source).map((op) => (
                   <option key={op} value={op}>
                     {op.replace("_", " ")}
                   </option>
                 ))}
               </Select>
-              {condOp !== "answered" && <Input label="Value" value={condValue} onChange={(e) => setCondValue(e.target.value)} />}
+              {needsValue &&
+                (source && CHOICES.includes(source.type) ? (
+                  <Select label="Value" value={condValue} error={show(errors.value)} onChange={(e) => setCondValue(e.target.value)}>
+                    <option value="">Choose a value</option>
+                    {(source.choices ?? []).map((c) => (
+                      <option key={c}>{c}</option>
+                    ))}
+                  </Select>
+                ) : (
+                  <Input label="Value" type={numeric ? "number" : "text"} value={condValue} error={show(errors.value)} onChange={(e) => setCondValue(e.target.value)} />
+                ))}
             </>
           )}
         </fieldset>

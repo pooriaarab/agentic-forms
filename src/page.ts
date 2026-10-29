@@ -111,6 +111,8 @@ export function renderFillPage(form: Form, nonce: string): string {
       : `<section aria-labelledby="notice-h"><h2 id="notice-h">Privacy notice</h2><p class="notice">${esc(form.notice)}</p>${
           form.retentionDays ? `<p>We keep your answers for ${form.retentionDays} days.</p>` : ""
         }<div class="opt"><input id="consent" name="consent" type="checkbox" required aria-required="true"><label for="consent">I have read the notice and agree <span class="req">(required)</span></label></div></section>`;
-  const data = JSON.stringify({ sections: form.sections }).replace(/</g, "\\u003c");
+  // madeBy is an editing detail: the page data leaves it out.
+  const plain = form.sections.map((s) => ({ ...s, questions: s.questions.map(({ madeBy: _by, ...q }) => q) }));
+  const data = JSON.stringify({ sections: plain }).replace(/</g, "\\u003c");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(form.title)}</title><link rel="stylesheet" href="/ui/styles.css"><style nonce="${nonce}">${STYLE}</style></head><body><main><h1>${esc(form.title)}</h1><div id="done" role="status" tabindex="-1" hidden><h2>Thank you</h2><p>We received your answers.</p></div><form id="form"><div id="errors" role="alert" tabindex="-1" hidden></div>${sections}${notice}<p><button type="submit">Send</button></p></form></main><script type="application/json" id="form-data" nonce="${nonce}">${data}</script><script nonce="${nonce}">${SCRIPT}</script></body></html>`;
 }

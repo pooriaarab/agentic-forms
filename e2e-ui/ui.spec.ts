@@ -19,6 +19,13 @@ async function audit(page: Page, view: string) {
   }
 }
 
+// A blocked script or style is a console error. Every test collects them and the last step fails on any.
+const cspErrors = (page: Page) => {
+  const seen: string[] = [];
+  page.on("console", (m) => /Content Security Policy|Refused to/.test(m.text()) && seen.push(m.text()));
+  return seen;
+};
+
 const addQuestion = async (page: Page, label: string, type: string, extra?: (dialog: ReturnType<Page["getByRole"]>) => Promise<void>) => {
   await page.getByRole("button", { name: /^Add question/ }).click();
   const dialog = page.getByRole("dialog", { name: "Add question" });
@@ -27,10 +34,13 @@ const addQuestion = async (page: Page, label: string, type: string, extra?: (dia
   await extra?.(dialog);
   await dialog.getByRole("button", { name: "Add question" }).click();
   await expect(dialog).toBeHidden();
+  // Focus goes back to the control that opened the dialog.
+  await expect(page.getByRole("button", { name: /^Add question/ })).toBeFocused();
 };
 const questionNames = (page: Page) => page.getByRole("list", { name: /^Questions in/ }).locator(".af-item__label").allTextContents();
 
 test("sign in, build a form, publish, fill it by link, read the response, reload", async ({ page, browser }) => {
+  const csp = cspErrors(page);
   // Sign in: a wrong token is refused with a clear message.
   await page.goto("/ui/");
   await expect(page.getByRole("heading", { name: "Forms" })).toBeVisible();
@@ -78,7 +88,12 @@ test("sign in, build a form, publish, fill it by link, read the response, reload
   expect(await questionNames(page)).toEqual(["Your name", "Team size", "Favorite color"]);
   await page.getByRole("button", { name: "Remove: Team size" }).click();
   expect(await questionNames(page)).toEqual(["Your name", "Favorite color"]);
+  await expect(page.getByRole("button", { name: /^Add question/ })).toBeFocused(); // the removed row's button is gone: focus moved on
   await expect(page.getByText("You have unsaved changes.")).toBeVisible();
+  // Leaving with unsaved edits asks first. Say no: the page stays.
+  page.once("dialog", (d) => void d.dismiss());
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "All forms" }).click();
+  await expect(page.getByRole("heading", { name: "Team survey", level: 1 })).toBeVisible();
 
   // Save. The server marks the questions the caller made. This token is a deployment agent.
   await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -132,6 +147,7 @@ test("sign in, build a form, publish, fill it by link, read the response, reload
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "All forms" }).click();
   await expect(page.getByRole("link", { name: "Team survey" })).toBeVisible();
   await audit(page, "10-forms-list");
+  expect(csp).toEqual([]);
 });
 
 const signIn = async (page: Page) => {
@@ -142,10 +158,12 @@ const signIn = async (page: Page) => {
 };
 
 test("a missing form shows an error, not a blank page", async ({ page }) => {
+  const csp = cspErrors(page);
   await signIn(page);
   await page.goto("/ui/#/forms/does-not-exist");
   await expect(page.getByRole("alert")).toContainText("not found");
   await audit(page, "11-error");
+  expect(csp).toEqual([]);
 });
 
 test("an edit made elsewhere is refused, and nothing is overwritten", async ({ page, request }) => {
@@ -164,6 +182,47 @@ test("an edit made elsewhere is refused, and nothing is overwritten", async ({ p
   await page.getByRole("button", { name: "Reload the form" }).click();
   await expect(page.getByRole("heading", { name: "Race", level: 1 })).toBeVisible();
   expect(await questionNames(page)).toEqual(["one", "two"]);
+});
+
+test("publish refuses a draft that an agent changed after the page loaded it", async ({ page, request }) => {
+  await signIn(page);
+  const id = `pub-${Date.now().toString(36)}`;
+  const headers = { authorization: `Bearer ${TOKEN}` };
+  const section = (labels: string[]) => [{ id: "main", title: "Questions", questions: labels.map((l) => ({ id: l, type: "short_text", label: l })) }];
+  await request.post("/api/v1/forms", { headers, data: { id, title: "Pub", sections: section(["one"]) } });
+  await page.goto(`/ui/#/forms/${id}`);
+  await expect(page.getByRole("heading", { name: "Pub", level: 1 })).toBeVisible();
+  await request.put(`/api/v1/forms/${id}`, { headers, data: { title: "Pub", sections: section(["one", "home address"]) } });
+  await page.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByRole("alert")).toContainText("Someone changed this form");
+  // Nothing went live: the public page says the form is not available.
+  expect((await request.get(`/f/${id}`)).status()).toBe(404);
+  await page.getByRole("button", { name: "Reload the form" }).click();
+  expect(await questionNames(page)).toEqual(["one", "home address"]);
+});
+
+test("a condition on a rating compares numbers, so the follow-up shows for the right answer", async ({ page }) => {
+  await signIn(page);
+  const id = `cond-${Date.now().toString(36)}`;
+  await page.getByRole("button", { name: "New form" }).click();
+  const dialog = page.getByRole("dialog", { name: "New form" });
+  await dialog.getByLabel("Title").fill("Mood");
+  await dialog.getByLabel("Form id").fill(id);
+  await dialog.getByRole("button", { name: "Create form" }).click();
+  await addQuestion(page, "How happy are you", "rating");
+  await addQuestion(page, "Why not", "short_text", async (d) => {
+    await d.getByLabel("Earlier question").selectOption({ label: "How happy are you" });
+    await d.getByLabel("Condition").selectOption("not_equals");
+    await d.getByLabel("Value").fill("5");
+  });
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("All changes saved.")).toBeVisible();
+  await page.getByRole("tab", { name: "Preview" }).click();
+  await expect(page.getByLabel("Why not", { exact: true })).toBeVisible(); // not answered yet: not equal to 5
+  await page.getByRole("group", { name: "How happy are you" }).getByLabel("5", { exact: true }).check();
+  await expect(page.getByLabel("Why not", { exact: true })).toBeHidden(); // a number 5 equals the number 5
+  await page.getByRole("group", { name: "How happy are you" }).getByLabel("3", { exact: true }).check();
+  await expect(page.getByLabel("Why not", { exact: true })).toBeVisible();
 });
 
 test("focus is visible on each stop of the sign-in page", async ({ page }) => {

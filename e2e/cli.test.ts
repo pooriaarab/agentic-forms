@@ -87,6 +87,7 @@ describe("cli flow", () => {
     expect(marked.retentionDays).toBe(30); // an absent retention is kept
     expect(marked.sections[0].questions.map((x: { madeBy?: string }) => x.madeBy)).toEqual([undefined, undefined, "agent"]);
     expect(cli(["submit", "poll", "--answers", '{"color":"red"}']).code).toBe(1); // draft is not open
+    expect(cli(["publish", "poll", "--expected-revision", "0"]).err).toContain("before you publish");
     expect(json(cli(["publish", "poll"]).out).status).toBe("published");
     expect(cli(["submit", "poll", "--answers", '{"color":"red"}']).err).toContain("why");
     expect(cli(["submit", "poll", "--answers", '{"color":"blue"}']).code).toBe(0);

@@ -3,14 +3,17 @@ import { createFileStore as createIdentityFileStore } from "agentic-identity/fil
 
 const ATTEMPTS = 200;
 /** The file store of agentic-identity fails a write when another process wrote the file first. Nothing was written, so the call can run again. */
-const lostRace = (error: unknown) => error instanceof StoreConflictError && /store file/.test(error.message);
+const lostRace = (error: unknown) => error instanceof StoreConflictError && /changed during the write|lock was taken over/.test(error.message);
+/** A lock the store already waited for is not tried again: a stuck lock must fail soon. */
+const GIVE_UP_MS = 30_000;
 
 async function again<T>(run: () => Promise<T>): Promise<T> {
+  const start = Date.now();
   for (let attempt = 1; ; attempt++) {
     try {
       return await run();
     } catch (error) {
-      if (attempt >= ATTEMPTS || !lostRace(error)) throw error;
+      if (attempt >= ATTEMPTS || Date.now() - start > GIVE_UP_MS || !lostRace(error)) throw error;
       await new Promise((resolve) => setTimeout(resolve, Math.random() * 20 * Math.min(attempt, 10)));
     }
   }

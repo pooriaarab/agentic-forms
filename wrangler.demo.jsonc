@@ -1,0 +1,12 @@
+{
+  // The public demo on workers.dev. Deploy with: npm run deploy:demo
+  "name": "agentic-forms-demo",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-01-01",
+  "workers_dev": true,
+  "triggers": { "crons": ["7,17,27,37,47,57 * * * *"] },
+  "assets": { "directory": "./public" },
+  "vars": { "FORMS_REGION": "eu" },
+  // Created in the EU: wrangler d1 create agentic-forms-demo --location weur
+  "d1_databases": [{ "binding": "DB", "database_name": "agentic-forms-demo", "database_id": "0ed8aad8-837c-4e15-b0ff-a709d94b460e" }]
+}

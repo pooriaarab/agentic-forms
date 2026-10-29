@@ -56,6 +56,22 @@ The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: 
 In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. The Worker uses one shared token, which acts as one principal that owns every form it makes.
 Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs at least 32 bytes. With a shorter token the Worker refuses to serve. The token is a bootstrap. The Worker also accepts credentials kept in the store, and they survive a restart. Make one in code: write a principal with `store.put("principals", id, { id, kind: "human", scopes: ["*:admin"] })`, then call `issueCredential(store, { principalId: id, kind: "api_key" })` from agentic-identity. It returns the bearer token once. Only the bearer header counts, not a cookie. With no token set, the Worker logs a warning. With no token and no stored credential, every call answers 401.
 
+## Live demo
+
+A demo Worker runs at <https://agentic-forms-demo.hello-fd1.workers.dev>. Check it with `/health`. The web UI is at `/ui/`. The API needs a bearer token, so a call without one answers 401. The demo keeps its data in a D1 database in the EU. It is for tests: do not put real answers in it.
+
+Deploy your own copy of the demo from a checkout. You do not need a CI secret.
+
+```sh
+npx wrangler d1 create agentic-forms-demo --location weur   # once: put the id in wrangler.demo.jsonc
+npx wrangler secret put FORMS_RATE_SECRET -c wrangler.demo.jsonc   # 32 bytes or more
+npx wrangler secret put FORMS_API_TOKEN -c wrangler.demo.jsonc     # 32 bytes or more
+npm ci
+npm run deploy:demo
+```
+
+`npm run deploy:demo` builds the UI and runs `wrangler deploy` with `wrangler.demo.jsonc`. It sets `WRANGLER_SEND_METRICS=false`. Log in with `wrangler login` or set `CLOUDFLARE_API_TOKEN` in your shell first. Never commit the token.
+
 ## SDK
 
 `agentic-forms/client` calls the Worker over HTTP. It uses only `fetch`, so it runs in browsers, Workers, and Node 22.

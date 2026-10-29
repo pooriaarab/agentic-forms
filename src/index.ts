@@ -16,3 +16,5 @@ export { createMcpServer } from "./mcp.js";
 export type { RemoteOptions } from "./mcp.js";
 export { BackfillError, backfillOwners } from "./core/backfill.js";
 export type { BackfillResult } from "./core/backfill.js";
+export { FormsAccountError, formsAccount } from "./account.js";
+export type { FormsAccount, FormsAccountDeps, FormsCollection } from "./account.js";

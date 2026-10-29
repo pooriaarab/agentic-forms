@@ -63,6 +63,8 @@
     "test": "npm run build:ui && vitest run",
     "test:ui": "npm run build && npm run build:ui && playwright test",
     "clean": "rm -rf dist",
+    "dev": "npm run build:ui && node scripts/dev-vars.mjs && WRANGLER_SEND_METRICS=false wrangler dev --port 8792",
+    "dev:smoke": "npm run build:ui && node scripts/dev-vars.mjs && node scripts/dev-smoke.mjs 8792 /health",
     "prepublishOnly": "npm run build",
     "ci:local": "npm run build && npm run typecheck && npm test && npm run test:ui",
     "deploy:demo": "npm run build:ui && WRANGLER_SEND_METRICS=false wrangler deploy -c wrangler.demo.jsonc"

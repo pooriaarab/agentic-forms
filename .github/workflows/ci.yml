@@ -23,6 +23,8 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
+      - name: dev smoke
+        run: node scripts/dev-vars.mjs && node scripts/dev-smoke.mjs 8792 /health
 
   ui:
     runs-on: ubuntu-latest

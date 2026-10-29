@@ -273,6 +273,22 @@ the token. The share link of a form points at `baseUrl`. The pages follow the ad
 - A pattern rule uses RE2 syntax and runs in linear time. Backreferences and lookaround are refused. A pattern has up to 256 characters, and a text with a pattern rule has up to 1000.
 - `exportCsv` holds every response in memory. Use it for forms with up to a few thousand responses.
 
+## Run locally
+
+```sh
+git clone https://github.com/pooriaarab/agentic-forms
+cd agentic-forms
+npm install && npm run dev
+```
+
+You can also use `bun install && bun run dev`. The `dev` script calls npm, so npm must be installed. The scripts need macOS, Linux, or WSL. The `dev` script builds the UI. The Worker needs a `FORMS_RATE_SECRET` of 32 bytes or more. If `.dev.vars` is missing, the script writes it with a random secret. Git ignores the file. If you have a `.dev.vars` already, add the secret to it (see `.dev.vars.example`). Then the script starts `wrangler dev` on <http://localhost:8792>. Wrangler keeps a local D1 database. The `dev` script turns off Wrangler telemetry. Set `WRANGLER_SEND_METRICS=false` when you run other wrangler commands.
+
+```sh
+curl -i http://localhost:8792/health   # 200
+```
+
+`npm run dev:smoke` runs the same check by itself. It starts the dev server. It waits for `/health` to answer 200. It stops the server. CI runs it as the "dev smoke" step. To use another port, change `8792` in the `dev` and `dev:smoke` scripts.
+
 ## Develop
 
 ```sh

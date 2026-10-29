@@ -137,10 +137,13 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
         return 0;
       case "backfill-owners": {
         const total = { created: [] as string[], skipped: 0, conflicts: [] as string[], invalid: [] as string[] };
+        const owner = str("owner");
         let cursor: string | undefined;
+        let pages = 0;
         try {
           do {
-            const page = await ops.backfillOwners(str("owner"), { cursor });
+            const page = await ops.backfillOwners(owner, { cursor });
+            pages++;
             total.created.push(...page.created);
             total.skipped += page.skipped;
             total.conflicts.push(...page.conflicts);
@@ -149,7 +152,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
           } while (cursor !== undefined);
         } catch (error) {
           // A second run skips the forms done so far. Show what this run did before the error.
-          err(`backfill stopped after: ${JSON.stringify(total)}`);
+          if (pages > 0) err(`backfill stopped after: ${JSON.stringify(total)}`);
           throw error;
         }
         out(JSON.stringify(total));

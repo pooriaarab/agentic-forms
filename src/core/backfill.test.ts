@@ -83,7 +83,7 @@ describe("owner backfill", () => {
   test("a bad limit or cursor is refused and nothing is written", async () => {
     const store = createMemoryStore();
     await legacy(store, "a");
-    for (const options of [{ limit: 0 }, { limit: 26 }, { limit: 1.5 }, { limit: NaN }, { limit: "5" }, { cursor: "junk" }, { cursor: 5 }]) {
+    for (const options of [{ limit: 0 }, { limit: 26 }, { limit: 1.5 }, { limit: NaN }, { limit: "5" }, { limit: null }, { cursor: "junk" }, { cursor: 5 }, { cursor: null }]) {
       await expect(backfillOwners(store, "olga", options as never), JSON.stringify(options)).rejects.toThrow();
     }
     expect(await grants(store)).toEqual([]);
@@ -132,7 +132,7 @@ describe("POST /api/v1/backfill-owners", () => {
     const { store, call } = await setup();
     await legacy(store, "a");
     expect((await call(human("olga", ["form:admin"]), "backfill-owners", "POST", { owner: "olga" })).status).toBe(403);
-    for (const body of [{}, null, "x", [], { owner: "a b" }, { owner: 5 }, { owner: "olga", limit: 0 }, { owner: "olga", limit: 26 }, { owner: "olga", limit: 1.5 }, { owner: "olga", limit: "5" }, { owner: "olga", cursor: "junk" }, { owner: "olga", cursor: 5 }]) expect((await call(human("root"), "backfill-owners", "POST", body)).status).toBe(400);
+    for (const body of [{}, null, "x", [], { owner: "a b" }, { owner: 5 }, { owner: "olga", limit: 0 }, { owner: "olga", limit: 26 }, { owner: "olga", limit: 1.5 }, { owner: "olga", limit: "5" }, { owner: "olga", limit: null }, { owner: "olga", cursor: "junk" }, { owner: "olga", cursor: 5 }]) expect((await call(human("root"), "backfill-owners", "POST", body)).status).toBe(400);
     expect(await grants(store)).toEqual([]);
   });
 });

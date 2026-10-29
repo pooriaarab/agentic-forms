@@ -39,7 +39,7 @@ export interface BackfillResult {
  */
 export async function backfillOwners(store: Store, owner: string, options: { limit?: number; cursor?: string } = {}): Promise<BackfillResult> {
   if (typeof owner !== "string" || !SUBJECT_ID.test(owner)) throw new BackfillError("invalid_owner", 'give an owner of letters, digits, "-" and "_"');
-  const limit = options.limit ?? BACKFILL_PAGE;
+  const limit = options.limit === undefined ? BACKFILL_PAGE : options.limit;
   if (!Number.isInteger(limit) || limit < 1 || limit > BACKFILL_PAGE) throw new BackfillError("invalid_query", `limit is a whole number from 1 to ${BACKFILL_PAGE}`);
   if (options.cursor !== undefined && (typeof options.cursor !== "string" || !wellFormedCursor(options.cursor))) throw new BackfillError("invalid_query", "the cursor is not valid");
   const sharing = createSharing(store);

@@ -59,7 +59,8 @@
     "test:ui": "npm run build:ui && playwright test",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build",
-    "ci:local": "npm run build && npm run typecheck && npm test && npm run test:ui"
+    "ci:local": "npm run build && npm run typecheck && npm test && npm run test:ui",
+    "deploy:demo": "npm run build:ui && WRANGLER_SEND_METRICS=false wrangler deploy -c wrangler.demo.jsonc"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

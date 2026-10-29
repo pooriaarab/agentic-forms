@@ -167,11 +167,12 @@ export const formsAccount: FormsAccount = {
           const trail = (await collect(store, "audit", { resourceId: formId })).length;
           const snapshots = (await collect(store, "form_versions", { id: formId })).length;
           // The data goes first, so a stop leaves an owner who can run it again. Each count is added when its step is done.
+          const hadHead = (await store.get("forms", formId)) !== null;
           const first = await ops.erase(formId);
+          if (hadHead) counts.forms += 1;
           counts.form_versions += snapshots;
           counts.responses += first.erased;
           await sharing.deleteResource(ctx, formId);
-          counts.forms += 1;
           counts.grants += grants;
           counts.audit += trail;
           counts.responses += (await ops.erase(formId)).erased;

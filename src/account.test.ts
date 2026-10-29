@@ -167,10 +167,10 @@ describe("eraseAccount", () => {
     let fail = true;
     store.transaction = ((fn: never) => (fail ? Promise.reject(new Error("down")) : real(fn))) as typeof store.transaction;
     const stopped = await formsAccount.eraseAccount(ANA, { store }).catch((e: Error) => e);
-    expect((stopped as Error).message).toMatch(/erase stopped at form ana-form: 0 forms, 1 snapshots, 1 responses/);
+    expect((stopped as Error).message).toMatch(/erase stopped at form ana-form: 1 forms, 1 snapshots, 1 responses/);
     expect(((stopped as Error).cause as Error | undefined)?.message).toBeDefined();
     fail = false;
-    expect(await formsAccount.eraseAccount(ANA, { store })).toMatchObject({ forms: 1, form_versions: 0, responses: 0 });
+    expect(await formsAccount.eraseAccount(ANA, { store })).toMatchObject({ forms: 0, form_versions: 0, responses: 0 });
     expect(await store.get("forms", "ana-form")).toBeNull();
   });
 
@@ -286,5 +286,12 @@ describe("eraseAccount", () => {
     await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form ana-form/);
     expect(await store.get("grants", "ana-form:human:ana")).not.toBeNull();
     expect(await store.get("forms", "ana-form")).not.toBeNull();
+  });
+
+  it("counts a form only when its head row existed", async () => {
+    const store = createMemoryStore();
+    await createSharing(store).createResource(ctx("ana"), { id: "ghost-form", type: "form" });
+    expect(await formsAccount.eraseAccount(ANA, { store })).toMatchObject({ forms: 0, form_versions: 0, responses: 0 });
+    expect(await store.get("resources", "ghost-form")).toBeNull();
   });
 });

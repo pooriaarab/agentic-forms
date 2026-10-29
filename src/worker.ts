@@ -1,7 +1,7 @@
 import { createD1Store, D1_SCHEMA, type D1Like } from "agentic-identity/cloudflare";
-import { parseRegion, type Store } from "agentic-identity";
+import { createStoreAuth, parseRegion, type Store } from "agentic-identity";
 import { createApp } from "./app.js";
-import { createTokenAuth } from "./core/token-auth.js";
+import { bearerOnly, createTokenAuth, firstAuth } from "./core/token-auth.js";
 import { createOps } from "./ops.js";
 
 export interface WorkerEnv {
@@ -13,7 +13,7 @@ export interface WorkerEnv {
   FORMS_UNSAFE_LOCAL_REGION?: string;
   /** Set it as a secret: wrangler secret put FORMS_RATE_SECRET. At least 32 bytes. It keys the hash of client addresses. */
   FORMS_RATE_SECRET?: string;
-  /** Set it as a secret: wrangler secret put FORMS_API_TOKEN. */
+  /** Set it as a secret: wrangler secret put FORMS_API_TOKEN. Optional: a shared token that acts as the deployment. Store credentials work without it. */
   FORMS_API_TOKEN?: string;
 }
 
@@ -30,6 +30,12 @@ async function openStore(env: WorkerEnv) {
   return { store, ops: createOps(store) };
 }
 
+// Credentials live in the store, so they survive a restart. The shared token, when set, still works as the bootstrap.
+const durableAuth = (store: Store, env: WorkerEnv) => {
+  if (env.FORMS_API_TOKEN === undefined) console.warn("FORMS_API_TOKEN is not set: only credentials kept in the store can call /api/v1.");
+  return env.FORMS_API_TOKEN === undefined ? bearerOnly(createStoreAuth(store)) : firstAuth(createTokenAuth(env.FORMS_API_TOKEN), bearerOnly(createStoreAuth(store)));
+};
+
 const forget = <T>(work: Promise<T>, reset: () => void) =>
   work.catch((error: unknown) => {
     reset();
@@ -40,7 +46,7 @@ const database = (env: WorkerEnv) => (storing ??= forget(openStore(env), () => (
 // The app is separate, so a bad API token or rate secret stops requests and not the purge job.
 const app = (env: WorkerEnv) =>
   (serving ??= forget(
-    database(env).then(({ store }) => createApp({ store, auth: env.FORMS_API_TOKEN === undefined ? undefined : createTokenAuth(env.FORMS_API_TOKEN), rateLimitSecret: env.FORMS_RATE_SECRET })),
+    database(env).then(({ store }) => createApp({ store, auth: durableAuth(store, env), rateLimitSecret: env.FORMS_RATE_SECRET })),
     () => (serving = undefined),
   ));
 

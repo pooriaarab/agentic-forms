@@ -30,3 +30,28 @@ export function createTokenAuth(token: string): Auth {
     },
   };
 }
+
+/** Tries each Auth in order. The first one that names a caller wins. */
+export function firstAuth(...auths: Auth[]): Auth {
+  return {
+    async authenticate(request) {
+      for (const auth of auths) {
+        const ctx = await auth.authenticate(request.clone());
+        if (ctx) return ctx;
+      }
+      return null;
+    },
+  };
+}
+
+/** Reads the bearer header only. A cookie is ambient: a page on another site can make the browser send it. */
+export function bearerOnly(auth: Auth): Auth {
+  return {
+    async authenticate(request) {
+      if (!request.headers.get("authorization")) return null;
+      const headers = new Headers(request.headers);
+      headers.delete("cookie");
+      return auth.authenticate(new Request(request.url, { method: request.method, headers }));
+    },
+  };
+}

@@ -125,6 +125,8 @@ export function createApp(options: AppOptions = {}) {
   });
   // Lists the forms the caller's grants name. It reads the grants of the root of the chain,
   // so a list does not write one audit row per form. Scopes still narrow what an agent sees.
+  // sharing.can writes an audit row for every check, allow or deny, so it cannot filter a list.
+  // identity 0.2.0 has no call to list the resources of a subject.
   app.get(forms, async (c) => {
     const ctx = c.get("ctx");
     const root = ctx.chain[0]?.id;

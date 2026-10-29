@@ -78,7 +78,9 @@ There is one method per API route: `health`, `listForms`, `createForm`, `getForm
 - A refused call throws `ApiError` with `status` (HTTP status), `code` (the API `error` field), `message`, `retryAfter` (seconds, on a 429), and `issues` when the API lists faults.
 - Every method takes `{ signal }` last, to cancel the call with an `AbortSignal`. A cancel throws the runtime's `AbortError`.
 - The client never retries. A retry of `createForm`, `submit`, or `purge` could repeat the write, so the caller decides.
-- `token` is optional. Without it, only `health` and `submit` work, so a browser page can submit with no secret. Any other call throws a `TypeError` before it sends.
+- `token` is optional. Without it, only `health` and `submit` work, so a browser page can submit with no secret. Any other call rejects with a `TypeError` before it sends.
+- `baseUrl` must be an absolute URL.
+- A 2xx reply that is not JSON rejects with `ApiError` (`code` is `bad_response`).
 - Pass `fetch` to `createClient` to use a proxy, a service binding, or a test double.
 
 ## Features

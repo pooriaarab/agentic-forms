@@ -14,7 +14,7 @@ export type ShareRole = "owner" | "editor" | "viewer";
 export type SubjectKind = "human" | "agent";
 
 export interface ClientOptions {
-  /** The Worker origin, for example "https://forms.example.com". A path prefix is kept. */
+  /** The Worker origin as an absolute URL, for example "https://forms.example.com". A path prefix is kept. */
   baseUrl: string;
   /** The bearer token for /api/v1. Leave it out to call only `health` and `submit`, which send no token. */
   token?: string;
@@ -84,7 +84,15 @@ export function createClient(options: ClientOptions) {
     const wait = Number(res.headers.get("retry-after"));
     throw new ApiError(res.status, code, message, body, Array.isArray(record.issues) ? record.issues : undefined, Number.isFinite(wait) && res.headers.get("retry-after") !== null ? wait : undefined);
   }
-  const json = async <T>(method: string, path: string, opts: Parameters<typeof send>[2] = {}): Promise<T> => (await send(method, path, opts)).json() as Promise<T>;
+  const json = async <T>(method: string, path: string, opts: Parameters<typeof send>[2] = {}): Promise<T> => {
+    const res = await send(method, path, opts);
+    try {
+      return (await res.json()) as T;
+    } catch {
+      // A proxy or a wrong baseUrl can answer 200 with a page that is not JSON.
+      throw new ApiError(res.status, "bad_response", `${method} ${path} answered ${res.status} with a body that is not JSON`);
+    }
+  };
   const form = (formId: string) => `/api/v1/forms/${id(formId)}`;
 
   return {

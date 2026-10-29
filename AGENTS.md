@@ -8,7 +8,7 @@ A form holds sections. A section holds questions. A condition shows a
 question or a section when an earlier answer matches. A save checks the
 form logic. A submit checks the answers against the newest published version.
 
-## The three faces
+## The faces
 
 - SDK: `import { createOps, createFileStore } from "agentic-forms"`.
 - Remote SDK: `import { createClient } from "agentic-forms/client"` calls the Worker HTTP API. A refused call throws `ApiError` with `status` and `code`.

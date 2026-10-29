@@ -123,6 +123,11 @@ describe("the client without a token", () => {
     expect(await caught(api.listForms())).toBeInstanceOf(TypeError);
   });
 
+  test("a 200 reply that is not JSON is an ApiError", async () => {
+    const page: typeof fetch = async () => new Response("<html>portal</html>", { status: 200 });
+    expect(await caught(createClient({ baseUrl, token: TOKEN, fetch: page }).listForms())).toMatchObject({ name: "ApiError", status: 200, code: "bad_response" });
+  });
+
   test("a 429 keeps the retry-after seconds", async () => {
     const limited: typeof fetch = async () => new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { "retry-after": "17" } });
     expect(await caught(createClient({ baseUrl, fetch: limited }).submit("poll", {}))).toMatchObject({ status: 429, code: "rate_limited", retryAfter: 17 });

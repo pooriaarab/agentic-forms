@@ -7,7 +7,7 @@
 
 Build forms and collect answers into tables.
 
-> Status: early release, version 0.6.0. The library, CLI, MCP server, and Worker work. The API can still change before 1.0.
+> Status: early release, version 0.7.0. The library, CLI, MCP server, and Worker work. The API can still change before 1.0.
 
 ## Install
 
@@ -15,7 +15,7 @@ Build forms and collect answers into tables.
 npm install agentic-forms
 ```
 
-It needs Node 22 or newer. It depends on `agentic-identity` 0.6.x and `agentic-design` 0.2.x.
+It needs Node 22 or newer. It depends on `agentic-identity` 0.7.x and `agentic-design` 0.3.x.
 
 ## Quick start
 
@@ -210,7 +210,7 @@ the token. The share link of a form points at `baseUrl`. The pages follow the ad
 - Versions: `publish` freezes a version. Editing a published form starts a new
   draft. Old responses stay readable against their own version.
 - `exportCsv` writes every response as CSV. It makes formula cells inert.
-- Agent tools: eleven MCP tools and one CLI command each for make, extend, publish, submit, list, export, and purge.
+- Agent tools: eleven MCP tools, and three more with a Worker (`share_form`, `list_shares`, `unshare_form`). One CLI command each for make, extend, publish, submit, list, export, and purge.
 - Access: every `/api/v1` route names the caller, and `can()` of `agentic-identity` decides it. The creator owns the form. Roles are owner, editor, and viewer. A viewer reads the form. An editor also edits, publishes, and reads answers. Only an owner shares, purges, deletes the form, and reads the audit log. A share names a kind, `human` or `agent`, because a person and an agent with the same id hold separate roles. Revoking with `DELETE .../shares/<subject>` needs `?kind=` too. Grants made before kinds are not honored until an admin runs `POST /api/v1/migrate-grants`: run it right after you deploy, and read `unresolved` in its answer. `backfill-owners` always makes the owner a person. A delegated agent keeps only the scopes it got. Each check is audited.
 - Storage runs on the `Store` port of `agentic-identity`. The Worker uses D1, the
   CLI uses a locked JSON file, and tests use the memory adapter.

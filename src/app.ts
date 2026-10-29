@@ -268,6 +268,84 @@ export function createApp(options: AppOptions = {}) {
     }
     return c.json({ ok: true });
   });
+  // Invites and share links. An owner makes them. The role is editor or viewer, never owner: only a grant makes an owner.
+  const pageOf = (c: Context): { limit?: number; cursor?: string } | Response => {
+    const raw = c.req.query("limit");
+    const limit = raw === undefined ? undefined : Number(raw);
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_AUDIT_PAGE)) {
+      return c.json({ error: "invalid_query", message: `limit is a whole number from 1 to ${MAX_AUDIT_PAGE}` }, 400);
+    }
+    const cursor = c.req.query("cursor");
+    if (cursor !== undefined && !wellFormedCursor(cursor)) return c.json({ error: "invalid_query", message: "the cursor is not valid" }, 400);
+    return { limit, cursor };
+  };
+  const invalidShare = (c: Context, message: string) => c.json({ error: "invalid_share", message }, 400);
+  /** The role and the lifetime that an invite or a link takes, or a 400. */
+  const shareTerms = (body: Record<string, unknown>): { role: "editor" | "viewer"; expiresInMs?: number } | string => {
+    if (body.role !== "editor" && body.role !== "viewer") return "give a role of editor or viewer";
+    const ms = body.expiresInMs;
+    if (ms !== undefined && (typeof ms !== "number" || !Number.isSafeInteger(ms) || ms <= 0)) return "expiresInMs is a whole number of milliseconds above 0";
+    return { role: body.role, ...(ms === undefined ? {} : { expiresInMs: ms }) };
+  };
+  const readBody = async (c: Context): Promise<Record<string, unknown>> => {
+    const body = await c.req.json();
+    return typeof body === "object" && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  };
+  app.post(`${forms}/:id/invites`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const body = await readBody(c);
+    const terms = shareTerms(body);
+    if (typeof terms === "string") return invalidShare(c, terms);
+    const { email, handle } = body;
+    if ((email === undefined) === (handle === undefined)) return invalidShare(c, "give an email or a handle, not both");
+    if (email !== undefined && (typeof email !== "string" || !/^[^\s@]+@[^\s@]+$/.test(email))) return invalidShare(c, "email is not valid");
+    if (handle !== undefined && (typeof handle !== "string" || !SUBJECT.test(handle))) return invalidShare(c, "handle is not valid");
+    return c.json(await sharing.createInvite(c.get("ctx"), c.req.param("id"), { ...terms, ...(email === undefined ? { handle: handle as string } : { email: email as string }) }), 201);
+  });
+  // An invite shows no email: it says whether it is for an email or a handle.
+  app.get(`${forms}/:id/invites`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const page = pageOf(c);
+    if (page instanceof Response) return page;
+    return c.json(await sharing.listInvites(c.get("ctx"), c.req.param("id"), page));
+  });
+  // The token shows once, in this reply. Only its hash is stored.
+  app.post(`${forms}/:id/links`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const body = await readBody(c);
+    const terms = shareTerms(body);
+    if (typeof terms === "string") return invalidShare(c, terms);
+    if (body.signedInOnly !== undefined && typeof body.signedInOnly !== "boolean") return invalidShare(c, "signedInOnly is true or false");
+    return c.json(await sharing.createLink(c.get("ctx"), c.req.param("id"), {
+      role: terms.role,
+      signedInOnly: body.signedInOnly === true,
+      ...(terms.expiresInMs === undefined ? {} : { expiresAt: now() + terms.expiresInMs }),
+    }), 201);
+  });
+  // The links of the form, without the token or its hash.
+  app.get(`${forms}/:id/links`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const page = pageOf(c);
+    if (page instanceof Response) return page;
+    const rows = await store.query("links", { where: { resourceId: c.req.param("id") }, ...page });
+    const links = rows.items.map(({ data: d }) => ({
+      id: String(d.id),
+      role: d.role,
+      signedInOnly: d.signedInOnly === true,
+      ...(typeof d.expiresAt === "number" ? { expiresAt: d.expiresAt } : {}),
+      ...(d.revokedAt != null ? { revokedAt: typeof d.revokedAt === "number" ? d.revokedAt : 0 } : {}),
+    }));
+    return c.json({ links, ...(rows.nextCursor === undefined ? {} : { nextCursor: rows.nextCursor }) });
+  });
+  // A link of another form is 404 here, even for an owner of both.
+  app.delete(`${forms}/:id/links/:link`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const linkId = c.req.param("link");
+    const link = SUBJECT.test(linkId) ? await store.get("links", linkId) : null;
+    if (link === null || link.resourceId !== c.req.param("id")) throw new OpsError("not_found", "no such link on this form");
+    await sharing.revokeLink(c.get("ctx"), linkId);
+    return c.json({ ok: true });
+  });
   app.get(`${forms}/:id/audit`, async (c) => {
     await require(c, "admin", c.req.param("id"));
     const raw = c.req.query("limit");

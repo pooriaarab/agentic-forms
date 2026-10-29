@@ -2,6 +2,12 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.10.0 - 2026-10-29
+
+### Added
+
+- Invites and share links. The owner of a form can invite a person by email or an agent by handle, list the invites, make a share link, list the links, and revoke a link. SDK: `invite`, `listInvites`, `createLink`, `listLinks`, `revokeLink`. CLI: `invite`, `invites`, `link`, `links`, `unlink`. MCP tools: `create_invite`, `list_invites`, `create_link`, `list_links`, `revoke_link`. HTTP: `POST` and `GET` on `/api/v1/forms/:id/invites` and `/links`, and `DELETE /api/v1/forms/:id/links/:link`. An invite or a link gives editor or viewer, never owner. A list shows no email and no link token.
+
 ## 0.9.1 - 2026-10-29
 
 ### Changed

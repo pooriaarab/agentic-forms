@@ -7,7 +7,7 @@ import { FormError, VersionConflictError } from "./core/repo.js";
 import { createFileStore } from "./core/retry-store.js";
 import type { Answers } from "./core/form.js";
 import { SubmitError } from "./core/responses.js";
-import { ApiError, createClient, type ShareRole, type SubjectKind } from "./client.js";
+import { ApiError, createClient, type InviteRole, type ShareRole, type SubjectKind } from "./client.js";
 import { OpsError, createOps } from "./ops.js";
 import { VERSION } from "./version.js";
 
@@ -35,11 +35,16 @@ Commands:
   share <id> --subject <s> --kind <human|agent> --role <r>     Give a person or an agent a role. Needs --url. Owner only.
   shares <id> [--limit n] [--cursor c]                         Print who holds a role. Needs --url. Owner only.
   unshare <id> --subject <s> --kind <human|agent>              Take a role away. Needs --url. Owner only.
+  invite <id> --role <editor|viewer> --email <e> | --handle <h> [--expires-in-ms n]   Invite a person or an agent. Needs --url. Owner only.
+  invites <id> [--limit n] [--cursor c]                        Print the invites of a form. Needs --url. Owner only.
+  link <id> --role <editor|viewer> [--signed-in-only] [--expires-in-ms n]   Make a share link. The token shows once. Needs --url. Owner only.
+  links <id> [--limit n] [--cursor c]                          Print the share links of a form. Needs --url. Owner only.
+  unlink <id> --link <link id>                                 Revoke a share link. Needs --url. Owner only.
   mcp                                                          Start the MCP server on stdio.
 
 Sharing needs a Worker: roles live on the server, and a local file has none. Set $AGENTIC_FORMS_TOKEN to a bearer token. A role is owner, editor, or viewer.
-The Worker has no share links: a form is shared with named people and agents. Its public fill page is /f/<id>.
-With --url or $AGENTIC_FORMS_URL set, "mcp" also has the tools share_form, list_shares, and unshare_form.
+An invite or a link gives editor or viewer, never owner. A list shows no email and no link token. The public fill page is /f/<id>.
+With --url or $AGENTIC_FORMS_URL set, "mcp" also has the tools share_form, list_shares, unshare_form, create_invite, list_invites, create_link, list_links, and revoke_link.
 
 Flags:
   --by <human|agent>   Mark the questions this command makes or changes. Default: no mark. A local file has no signed-in caller, so this is your own claim.
@@ -50,7 +55,7 @@ Flags:
 
 class UsageError extends Error {}
 
-const BOOLEAN_FLAGS = new Set(["required", "consent", "publish", "help"]);
+const BOOLEAN_FLAGS = new Set(["required", "consent", "publish", "help", "signed-in-only"]);
 
 function parse(argv: string[]) {
   const positional: string[] = [];
@@ -76,7 +81,7 @@ const num = (flags: Record<string, string | true>, name: string): number | undef
   return value;
 };
 
-const SHARE_COMMANDS = new Set(["share", "shares", "unshare"]);
+const SHARE_COMMANDS = new Set(["share", "shares", "unshare", "invite", "invites", "link", "links", "unlink"]);
 
 function remoteFrom(flags: Record<string, string | true>, env: NodeJS.ProcessEnv = process.env): { url: string; token: string } | undefined {
   const url = typeof flags.url === "string" ? flags.url : env.AGENTIC_FORMS_URL;
@@ -125,7 +130,23 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
         if (flags.kind !== "human" && flags.kind !== "agent") throw new UsageError("--kind is human or agent");
         return flags.kind;
       };
-      if (command === "share") {
+      const role = (): InviteRole => {
+        if (flags.role !== "editor" && flags.role !== "viewer") throw new UsageError("--role is editor or viewer");
+        return flags.role;
+      };
+      const page = () => ({ limit: num(flags, "limit"), cursor: typeof flags.cursor === "string" ? flags.cursor : undefined });
+      if (command === "invite") {
+        const email = typeof flags.email === "string" ? flags.email : undefined;
+        const handle = typeof flags.handle === "string" ? flags.handle : undefined;
+        if ((email === undefined) === (handle === undefined)) throw new UsageError("invite needs --email or --handle, not both");
+        out(JSON.stringify(await client.invite(formId, { role: role(), email, handle, expiresInMs: num(flags, "expires-in-ms") })));
+      } else if (command === "invites") out(JSON.stringify(await client.listInvites(formId, page())));
+      else if (command === "link") out(JSON.stringify(await client.createLink(formId, { role: role(), signedInOnly: flags["signed-in-only"] === true ? true : undefined, expiresInMs: num(flags, "expires-in-ms") })));
+      else if (command === "links") out(JSON.stringify(await client.listLinks(formId, page())));
+      else if (command === "unlink") {
+        if (typeof flags.link !== "string") throw new UsageError("unlink needs --link");
+        out(JSON.stringify(await client.revokeLink(formId, flags.link)));
+      } else if (command === "share") {
         if (flags.role !== "owner" && flags.role !== "editor" && flags.role !== "viewer") throw new UsageError("--role is owner, editor, or viewer");
         out(JSON.stringify(await client.share(formId, { subject: subject(), kind: kind(), role: flags.role as ShareRole })));
       } else if (command === "unshare") out(JSON.stringify(await client.revokeShare(formId, subject(), kind())));

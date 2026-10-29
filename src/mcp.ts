@@ -60,6 +60,13 @@ export function createMcpServer(store: Store = createMemoryStore(), remote?: Rem
     const subject = { subject: z.string().describe("The id of the person or agent."), kind: z.enum(["human", "agent"]).describe("A person and an agent with one id hold separate roles.") };
     tool("share_form", "Give a person or an agent a role on a form, through the Worker. Needs an owner token. A role is owner, editor, or viewer.", { ...form, ...subject, role: z.enum(["owner", "editor", "viewer"]) }, false, ({ form: id, ...share }) => client.share(id, share));
     tool("list_shares", "List who holds a role on a form, through the Worker. Needs an owner token.", { ...form, limit: z.number().int().min(1).max(MAX_AUDIT_PAGE).optional(), cursor: z.string().optional() }, true, ({ form: id, ...page }) => client.listShares(id, page));
+    const terms = { role: z.enum(["editor", "viewer"]).describe("Never owner: only a share makes an owner."), expiresInMs: z.number().int().positive().optional() };
+    const paging = { limit: z.number().int().min(1).max(MAX_AUDIT_PAGE).optional(), cursor: z.string().optional() };
+    tool("create_invite", "Invite a person by email or an agent by handle to a form, through the Worker. Give email or handle, not both. Needs an owner token.", { ...form, ...terms, email: z.string().optional(), handle: z.string().optional() }, false, ({ form: id, ...invite }) => client.invite(id, invite));
+    tool("list_invites", "List the invites of a form, through the Worker. An invite shows no email. Needs an owner token.", { ...form, ...paging }, true, ({ form: id, ...page }) => client.listInvites(id, page));
+    tool("create_link", "Make a share link for a form, through the Worker. The reply holds the token once: it cannot be read again. Needs an owner token.", { ...form, ...terms, signedInOnly: z.boolean().optional() }, false, ({ form: id, ...link }) => client.createLink(id, link));
+    tool("list_links", "List the share links of a form, through the Worker. A link shows no token. Needs an owner token.", { ...form, ...paging }, true, ({ form: id, ...page }) => client.listLinks(id, page));
+    tool("revoke_link", "Revoke a share link of a form, through the Worker. Needs an owner token.", { ...form, link: z.string().describe("The link id.") }, false, ({ form: id, link }) => client.revokeLink(id, link));
     tool("unshare_form", "Take a role away on a form, through the Worker. Needs an owner token.", { ...form, ...subject }, false, ({ form: id, subject: who, kind }) => client.revokeShare(id, who, kind));
   }
   return server;

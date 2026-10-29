@@ -14,7 +14,7 @@ form logic. A submit checks the answers against the newest published version.
 - Remote SDK: `import { createClient } from "agentic-forms/client"` calls the Worker HTTP API. A refused call throws `ApiError` with `status` and `code`.
 - CLI: `npx agentic-forms --help`.
 - MCP: `npx agentic-forms mcp`, then call a tool below.
-- HTTP: `/api/v1/forms` on the Worker, with a bearer token. Roles per form: owner, editor, viewer. Share with `POST /api/v1/forms/<id>/shares` (`{subject, kind, role}`, kind is `human` or `agent`: a person and an agent with the same id hold separate roles). List with `GET /api/v1/forms/<id>/shares` (owner only; `limit`, `cursor`). Revoke with `DELETE /api/v1/forms/<id>/shares/<subject>?kind=human|agent`. `PUT /api/v1/forms/<id>` replaces the draft (title, sections; notice and retention stay unless you send them, null removes; `expectedRevision` refuses a stale write). The server marks each new or changed question `madeBy` `human` or `agent` from the caller. `DELETE /api/v1/forms/<id>` erases a form, its answers, and its grants. `POST /f/<id>` is the public submit.
+- HTTP: `/api/v1/forms` on the Worker, with a bearer token. Roles per form: owner, editor, viewer. Share with `POST /api/v1/forms/<id>/shares` (`{subject, kind, role}`, kind is `human` or `agent`: a person and an agent with the same id hold separate roles). List with `GET /api/v1/forms/<id>/shares` (owner only; `limit`, `cursor`). Revoke with `DELETE /api/v1/forms/<id>/shares/<subject>?kind=human|agent`. `PUT /api/v1/forms/<id>` replaces the draft (title, sections; notice and retention stay unless you send them, null removes; `expectedRevision` refuses a stale write). The server marks each new or changed question `madeBy` `human` or `agent` from the caller. `DELETE /api/v1/forms/<id>` erases a form, its answers, and its grants. `POST` and `GET` on `/api/v1/forms/<id>/invites` and `/links` make and list invites and share links (owner only; role editor or viewer); `DELETE /api/v1/forms/<id>/links/<link>` revokes one. `POST /f/<id>` is the public submit.
 
 ## MCP tools
 
@@ -34,6 +34,8 @@ form logic. A submit checks the answers against the newest published version.
 | share_form | Give a person or an agent a role. Needs a Worker (`AGENTIC_FORMS_URL`, `AGENTIC_FORMS_TOKEN`). |
 | list_shares | List who holds a role. Same setup. |
 | unshare_form | Take a role away. Same setup. |
+| create_invite, list_invites | Invite by email or handle, and list the invites. Owner only. Same setup. |
+| create_link, list_links, revoke_link | Make, list, and revoke share links. The token shows once. Same setup. |
 
 ## The loop
 

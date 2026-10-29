@@ -40,7 +40,7 @@ agentic-forms responses poll
 
 ## Use the MCP server
 
-Start it with `agentic-forms mcp`. The tools are `new_form`, `add_question`, `update_form`, `publish_form`, `list_forms`, `get_form`, `submit_response`, `list_responses`, `export_csv`, `purge_expired`, and `purge_all`. With `AGENTIC_FORMS_URL` and `AGENTIC_FORMS_TOKEN` set, it also has `share_form`, `list_shares`, and `unshare_form`, which call the Worker.
+Start it with `agentic-forms mcp`. The tools are `new_form`, `add_question`, `update_form`, `publish_form`, `list_forms`, `get_form`, `submit_response`, `list_responses`, `export_csv`, `purge_expired`, and `purge_all`. With `AGENTIC_FORMS_URL` and `AGENTIC_FORMS_TOKEN` set, it also has `share_form`, `list_shares`, `unshare_form`, `create_invite`, `list_invites`, `create_link`, `list_links`, and `revoke_link`, which call the Worker.
 
 ## The web UI
 

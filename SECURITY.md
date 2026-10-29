@@ -21,5 +21,4 @@ The package is in development. Only the latest commit on `main` gets fixes.
 ## Secure defaults
 
 - The package ships no default credentials.
-- Test-only sign-in is off unless an environment variable turns it on.
-- Logs hold no email addresses and no document content.
+- The package has no logger. The CLI writes errors to stderr.

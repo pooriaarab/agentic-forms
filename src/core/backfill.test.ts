@@ -58,6 +58,20 @@ describe("owner backfill", () => {
     expect(await grants(store)).toEqual(["a:olga", "b:olga", "c:olga"]);
   });
 
+  test("a run stops at the limit, and the next run goes on from its cursor", async () => {
+    const store = createMemoryStore();
+    for (const id of ["a", "b", "c", "d", "e"]) await legacy(store, id);
+    const first = await backfillOwners(store, "olga", { limit: 2 });
+    expect(first.created).toEqual(["a", "b"]);
+    expect(first.nextCursor).toBeTypeOf("string");
+    expect(await grants(store)).toEqual(["a:olga", "b:olga"]);
+    const second = await backfillOwners(store, "olga", { limit: 2, cursor: first.nextCursor });
+    expect(second.created).toEqual(["c", "d"]);
+    const third = await backfillOwners(store, "olga", { limit: 2, cursor: second.nextCursor });
+    expect(third).toEqual({ created: ["e"], skipped: 0, conflicts: [] });
+    expect(await grants(store)).toHaveLength(5);
+  });
+
   test("a bad owner is refused and nothing is written", async () => {
     const store = createMemoryStore();
     await legacy(store, "a");
@@ -88,11 +102,20 @@ describe("POST /api/v1/backfill-owners", () => {
     expect((await call(human("olga"), "forms/a")).status).toBe(200);
   });
 
+  test("the route takes a limit and a cursor, and goes on page by page", async () => {
+    const { store, call } = await setup();
+    for (const id of ["a", "b", "c"]) await legacy(store, id);
+    const first = (await (await call(human("root"), "backfill-owners", "POST", { owner: "olga", limit: 2 })).json()) as { created: string[]; nextCursor: string };
+    expect(first.created).toEqual(["a", "b"]);
+    const second = await (await call(human("root"), "backfill-owners", "POST", { owner: "olga", limit: 2, cursor: first.nextCursor })).json();
+    expect(second).toEqual({ created: ["c"], skipped: 0, conflicts: [] });
+  });
+
   test("a caller without the all-forms admin scope gets 403, and a bad owner gets 400", async () => {
     const { store, call } = await setup();
     await legacy(store, "a");
     expect((await call(human("olga", ["form:admin"]), "backfill-owners", "POST", { owner: "olga" })).status).toBe(403);
-    for (const body of [{}, { owner: "a b" }, { owner: 5 }]) expect((await call(human("root"), "backfill-owners", "POST", body)).status).toBe(400);
+    for (const body of [{}, null, "x", [], { owner: "a b" }, { owner: 5 }, { owner: "olga", limit: 0 }, { owner: "olga", limit: 1.5 }, { owner: "olga", limit: "5" }, { owner: "olga", cursor: "junk" }, { owner: "olga", cursor: 5 }]) expect((await call(human("root"), "backfill-owners", "POST", body)).status).toBe(400);
     expect(await grants(store)).toEqual([]);
   });
 });

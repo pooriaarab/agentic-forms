@@ -1,7 +1,8 @@
 import { createSharing, type PrincipalContext, type Store } from "agentic-identity";
-import { createFormRepo } from "./repo.js";
+import { SUBJECT_ID } from "./schema.js";
 
-const OWNER = /^[A-Za-z0-9_-]{1,128}$/;
+/** Forms per pass. Each form costs a few D1 calls, and one Worker request may make only so many. */
+export const BACKFILL_PAGE = 25;
 
 export interface BackfillResult {
   /** Forms that got an owner row now. */
@@ -10,6 +11,8 @@ export interface BackfillResult {
   skipped: number;
   /** Forms whose id is held by a resource of another type. They need a person to decide. */
   conflicts: string[];
+  /** Pass it back to go on. Absent when every form has been seen. */
+  nextCursor?: string;
 }
 
 /**
@@ -17,27 +20,26 @@ export interface BackfillResult {
  * deployment can reach them. This gives each of them one owner row for `owner`.
  * It is safe to run again: a form with a resource row is left as it is, and the
  * row and the grant are written in one transaction.
+ *
+ * One call handles one page of forms (`limit`, 25 by default) and returns
+ * `nextCursor` while more remain. Call again with it until it is absent.
  */
-export async function backfillOwners(store: Store, owner: string): Promise<BackfillResult> {
-  if (typeof owner !== "string" || !OWNER.test(owner)) throw new Error('the owner is a principal id of letters, digits, "-" and "_"');
+export async function backfillOwners(store: Store, owner: string, options: { limit?: number; cursor?: string } = {}): Promise<BackfillResult> {
+  if (typeof owner !== "string" || !SUBJECT_ID.test(owner)) throw new Error('the owner is a principal id of letters, digits, "-" and "_"');
   const sharing = createSharing(store);
   const ctx: PrincipalContext = { principalId: owner, kind: "human", chain: [{ id: owner, kind: "human" }], scopes: ["form:write"] };
-  const result: BackfillResult = { created: [], skipped: 0, conflicts: [] };
-  for (const form of await createFormRepo(store).list()) {
-    const existing = await store.get("resources", form.id);
-    if (existing === null) {
-      try {
-        await sharing.createResource(ctx, { id: form.id, type: "form" });
-        result.created.push(form.id);
-        continue;
-      } catch (error) {
-        // Another run took it between the read and the write.
-        if (!(error instanceof Error) || error.message !== "resource exists") throw error;
-      }
+  const page = await store.query("forms", { orderBy: { field: "id" }, limit: options.limit ?? BACKFILL_PAGE, cursor: options.cursor });
+  const result: BackfillResult = { created: [], skipped: 0, conflicts: [], ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) };
+  for (const { id } of page.items) {
+    try {
+      await sharing.createResource(ctx, { id, type: "form" });
+      result.created.push(id);
+    } catch (error) {
+      // The resource row is there already: made by a role, by another run, or by another app.
+      if (!(error instanceof Error) || error.message !== "resource exists") throw error;
+      if ((await store.get("resources", id))?.type === "form") result.skipped++;
+      else result.conflicts.push(id);
     }
-    const type = (await store.get("resources", form.id))?.type;
-    if (type === "form") result.skipped++;
-    else result.conflicts.push(form.id);
   }
   return result;
 }

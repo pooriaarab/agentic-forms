@@ -6,6 +6,8 @@ const id = z.string().min(1).max(100);
 // A form id is also a store id and a sharing resource id, so it holds only letters, digits, "-" and "_".
 // The store keeps ids of the form __name__ for itself.
 export const FORM_ID = /^(?!__.*__$)[A-Za-z0-9_-]{1,100}$/;
+/** A principal id, as sharing takes it for a subject. */
+export const SUBJECT_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const formId = z.string().regex(FORM_ID);
 const condition = z
   .object({

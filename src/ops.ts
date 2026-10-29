@@ -77,8 +77,8 @@ export function createOps(store: Store) {
       }
       return { purged: purged.value, rateLimits: rateLimits.value };
     },
-    /** Gives forms made before roles an owner row for `owner`. Safe to run again. */
-    backfillOwners: (owner: string) => backfillOwners(store, owner),
+    /** Gives forms made before roles an owner row for `owner`. One page per call: go on while `nextCursor` is set. Safe to run again. */
+    backfillOwners: (owner: string, options?: { limit?: number; cursor?: string }) => backfillOwners(store, owner, options),
     async purge(formId: string) {
       await get(formId);
       return { purged: await responses.purgeExpired(formId) };

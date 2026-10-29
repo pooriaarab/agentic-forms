@@ -5,13 +5,13 @@ import { FormError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
 import { ROLES, createMemoryStore, createSharing, hasScope, type Action, type Auth, type PrincipalContext, type Role, type Store } from "agentic-identity";
 import { clientKey, createRateLimiter } from "./core/rate-limit.js";
-import { FORM_ID } from "./core/schema.js";
+import { FORM_ID, SUBJECT_ID } from "./core/schema.js";
 import { OpsError, createOps } from "./ops.js";
 import { renderFillPage } from "./page.js";
 import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
-const SUBJECT = /^[A-Za-z0-9_-]{1,128}$/;
+const SUBJECT = SUBJECT_ID;
 const MAX_LIMIT = 1000;
 
 /** A cursor is base64url of JSON [value, id]. Stores differ in what they do with a crafted one, so check the shape here. */
@@ -237,9 +237,14 @@ export function createApp(options: AppOptions = {}) {
   // For forms made before roles. Only a caller with the all-forms admin scope may run it.
   app.post("/api/v1/backfill-owners", async (c) => {
     if (!hasScope(c.get("ctx").scopes, "*:admin")) throw new AccessError(403);
-    const { owner } = await c.req.json();
+    const body = await c.req.json();
+    const { owner, cursor, limit } = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
     if (typeof owner !== "string" || !SUBJECT.test(owner)) return c.json({ error: "invalid_owner", message: 'give an owner of letters, digits, "-" and "_"' }, 400);
-    return c.json(await ops.backfillOwners(owner));
+    if (cursor !== undefined && (typeof cursor !== "string" || !wellFormedCursor(cursor))) return c.json({ error: "invalid_query", message: "the cursor is not valid" }, 400);
+    if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT)) {
+      return c.json({ error: "invalid_query", message: `limit is a whole number from 1 to ${MAX_LIMIT}` }, 400);
+    }
+    return c.json(await ops.backfillOwners(owner, { cursor, limit }));
   });
 
   app.onError((error, c) => {

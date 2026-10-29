@@ -90,7 +90,12 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 - Local `wrangler dev` uses a D1 that reports no region, so the region check fails there. For local work only, set `FORMS_REGION=unknown` and `FORMS_UNSAFE_LOCAL_REGION=1`. Never set `FORMS_UNSAFE_LOCAL_REGION` in a deployed Worker.
 - Import `createMemoryStore` and the `Store` types from `agentic-identity`. This package does not re-export them.
 - The fill page needs JavaScript and does not show file questions.
-- Forms made before roles have no owner. Give them one: `agentic-forms backfill-owners --owner <id>` (file store), `POST /api/v1/backfill-owners` with `{"owner": "<id>"}` (needs the all-forms admin scope), or `backfillOwners(store, owner)` in code. A form that already has a resource row is not touched, so it is safe to run again. A form whose id is held by another resource type is listed under `conflicts`.
+- Forms made before roles have no owner. Give them one with one of these:
+  - CLI: `agentic-forms backfill-owners --owner <id>`. It goes through every form.
+  - HTTP: `POST /api/v1/backfill-owners` with `{"owner": "<id>"}`. It needs the all-forms admin scope.
+  - Code: `backfillOwners(store, owner)`.
+
+  Each HTTP or code call handles 25 forms, so it stays under the D1 call limit of one Worker request. Send the `nextCursor` back until it is absent. A form that already has a resource row is not touched, so a second run is safe. A form whose id is held by another resource type is listed under `conflicts`.
 - The Worker deletes expired responses every 10 minutes (a Cron Trigger). The CLI does not schedule: run `purge-all` yourself. Each run reads a bounded number of pages per pass, so a big backlog clears over several runs. A run can need more D1 calls than the Workers Free plan allows. The ordered read has no index: a very large `responses` collection makes each page read slow.
 - Set two Worker secrets: `wrangler secret put FORMS_RATE_SECRET` (32 bytes or more, it keys the hash of client addresses) and `FORMS_API_TOKEN`. Without the rate secret the Worker refuses requests. A client with no address header shares one counter. An IPv6 client counts by its /64. An attacker with many addresses can still make many counters: put the platform's rate limiting in front for that.
 - The Worker tells callers apart only if you give `createApp` a real `Auth` adapter. With the shared token, every caller is one owner.

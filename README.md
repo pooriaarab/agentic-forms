@@ -66,7 +66,7 @@ handler for the purge job. Your Wrangler config needs these:
 `FORMS_API_TOKEN` is optional. See `wrangler.jsonc` in this repo for an example. The web UI is not in
 the package, so `/ui/` answers 404 in this setup.
 
-In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. The Worker uses one shared token, which acts as one principal that owns every form it makes.
+In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. The API reads only a bearer token of 1 to 512 letters, digits, `_` and `-`. Any other token answers 401 before the port runs. The Worker uses one shared token, which acts as one principal that owns every form it makes.
 Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs 32 to 512 bytes of letters, digits, `_` and `-` (for example `openssl rand -hex 32`). With another token the Worker refuses to serve. The token is a bootstrap. The Worker also accepts credentials kept in the store, and they survive a restart. Make one in code: write a principal with `store.put("principals", id, { id, kind: "human", scopes: ["*:admin"] })`, then call `issueCredential(store, { principalId: id, kind: "api_key" })` from agentic-identity. It returns the bearer token once. Only the bearer header counts, not a cookie. With no token set, the Worker logs a warning. With no token and no stored credential, every call answers 401.
 
 ## Live demo

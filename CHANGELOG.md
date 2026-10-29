@@ -6,17 +6,18 @@ This file lists what changed in each release. The versions follow semver. The AP
 
 Breaking changes. Read these before you upgrade from 0.5.0:
 
-- Breaking for the CLI data file. The file store is now the one in `agentic-identity/file`. The data file has a new format. A file written by an earlier version is refused with "not an agentic-identity store file" and is not changed. Version 0.5.0 is the last one that reads it. Nothing is migrated: forms, shares and responses stay in the old file. Export them with 0.5.0 before you upgrade.
+- Breaking for the CLI data file. The file store is now the one in `agentic-identity/file`. The data file has a new format. The store refuses a file from an earlier version with "not an agentic-identity store file" and does not change it. Version 0.5.0 is the last one that reads it. Nothing is migrated: forms, shares and responses stay in the old file. Export them with 0.5.0 before you upgrade.
 - Breaking: `FORMS_API_TOKEN` must be 32 to 512 bytes of letters, digits, `_` and `-`. The Worker refuses to start with any other token. Make a new token with `openssl rand -hex 32` before you deploy.
+- Breaking: `/api/v1` refuses a bearer token that is not 1 to 512 letters, digits, `_` and `-`, for every `Auth` adapter you pass to `createApp`. It answers 401 before the adapter runs. An adapter that throws now answers 503 `auth unavailable`.
 - Breaking: `FileStoreOptions` (`staleMs`, `waitMs`) is gone. `createFileStore(path, options)` keeps its call. Its options are `region` and `now`.
 
 Other changes:
 
 - Add `list` to the CLI. It prints every form in the data file as JSON. Add `list_forms` to the MCP server, and `ops.list()` to the SDK. The CLI and MCP server have no signed-in caller, so they list every form.
-- A form with no responses exports its question columns. The header has the questions of the published version, or of the draft before any publish.
-- `createFileStore` runs a call again when another process won the race for the data file. A stuck lock or a version conflict still fails at once.
+- The CSV header always has the questions of the published version, or of the draft before any publish. Then it has the questions of older versions that have responses. A form with no responses still exports its question columns.
+- `createFileStore` runs a call again when another process won the race for the data file. A lock held for 5 seconds fails the call with "the store file is locked by another process". Version 0.5.0 waited 30 seconds.
 - The store of agentic-identity takes over a lock older than 3 seconds and does not check that its owner is alive. A very slow write can lose a concurrent one.
-- The HTTP API checks the caller with `agentic-identity/http`. The package depends on `agentic-identity` 0.6.0.
+- The HTTP API checks the caller with `agentic-identity/http`. The package depends on `agentic-identity` 0.6.x.
 
 ## 0.5.0 - 2026-10-29
 

@@ -108,6 +108,15 @@ describe("sharing from MCP", () => {
     expect(names).not.toContain("share_form");
   });
 
+  test("a URL with no token keeps the local tools and drops the sharing tools", async () => {
+    const half = new Client({ name: "e2e", version: "0.0.0" });
+    await half.connect(new StdioClientTransport({ command: "node", args: ["dist/cli.js", "mcp"], env: { PATH: process.env.PATH ?? "", AGENTIC_FORMS_DATA: join(work, "half.json"), AGENTIC_FORMS_URL: url }, stderr: "ignore" }));
+    const names = (await half.listTools()).tools.map((t) => t.name);
+    await half.close();
+    expect(names).toContain("new_form");
+    expect(names).not.toContain("share_form");
+  });
+
   test("with a Worker it has share_form, list_shares, and unshare_form", async () => {
     mcp = new Client({ name: "e2e", version: "0.0.0" });
     await mcp.connect(new StdioClientTransport({ command: "node", args: ["dist/cli.js", "mcp"], env: { PATH: process.env.PATH ?? "", AGENTIC_FORMS_DATA: join(work, "remote.json"), AGENTIC_FORMS_URL: url, AGENTIC_FORMS_TOKEN: ADA } }));

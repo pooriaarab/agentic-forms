@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z, ZodError } from "zod";
 import { FormError, VersionConflictError } from "./core/repo.js";
-import { createMemoryStore, type Store } from "agentic-identity";
+import { MAX_AUDIT_PAGE, createMemoryStore, type Store } from "agentic-identity";
 import { SubmitError } from "./core/responses.js";
 import { formSpecSchema, formUpdateSchema, questionSchema } from "./core/schema.js";
 import { ApiError, createClient } from "./client.js";
@@ -59,7 +59,7 @@ export function createMcpServer(store: Store = createMemoryStore(), remote?: Rem
     const client = createClient({ baseUrl: remote.url, token: remote.token });
     const subject = { subject: z.string().describe("The id of the person or agent."), kind: z.enum(["human", "agent"]).describe("A person and an agent with one id hold separate roles.") };
     tool("share_form", "Give a person or an agent a role on a form, through the Worker. Needs an owner token. A role is owner, editor, or viewer.", { ...form, ...subject, role: z.enum(["owner", "editor", "viewer"]) }, false, ({ form: id, ...share }) => client.share(id, share));
-    tool("list_shares", "List who holds a role on a form, through the Worker. Needs an owner token.", { ...form, limit: z.number().int().min(1).optional(), cursor: z.string().optional() }, true, ({ form: id, ...page }) => client.listShares(id, page));
+    tool("list_shares", "List who holds a role on a form, through the Worker. Needs an owner token.", { ...form, limit: z.number().int().min(1).max(MAX_AUDIT_PAGE).optional(), cursor: z.string().optional() }, true, ({ form: id, ...page }) => client.listShares(id, page));
     tool("unshare_form", "Take a role away on a form, through the Worker. Needs an owner token.", { ...form, ...subject }, false, ({ form: id, subject: who, kind }) => client.revokeShare(id, who, kind));
   }
   return server;

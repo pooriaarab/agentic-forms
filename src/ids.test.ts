@@ -28,6 +28,7 @@ const routes: [string, string, unknown?][] = [
   ["GET", "{id}/export"],
   ["POST", "{id}/purge"],
   ["POST", "{id}/shares", { subject: "vic", kind: "human", role: "viewer" }],
+  ["GET", "{id}/shares"],
   ["DELETE", "{id}/shares/vic?kind=human"],
   ["GET", "{id}/audit"],
 ];

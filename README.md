@@ -59,7 +59,7 @@ npx agentic-forms shares poll                                           # who ho
 npx agentic-forms unshare poll --subject bob --kind human               # take it away
 ```
 
-A role is `owner`, `editor`, or `viewer`. A refused call prints `error: <code>: <message>` and exits 1. The Worker has no share links: share with named people and agents. With the same two variables, `agentic-forms mcp` also has the tools `share_form`, `list_shares`, and `unshare_form`. Without them, these tools do not exist.
+Use an `https` URL: the token goes in a header. A role is `owner`, `editor`, or `viewer`. Only an owner may list shares. A refused call prints `error: <code>: <message>` and exits 1. The Worker has no share links: share with named people and agents. With the same two variables, `agentic-forms mcp` also has the tools `share_form`, `list_shares`, and `unshare_form`. Without them, these tools do not exist.
 
 The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it). The file uses the store format of agentic-identity. A file written by 0.5.0 or earlier is refused and not migrated.
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.

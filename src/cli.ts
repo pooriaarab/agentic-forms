@@ -100,7 +100,15 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
     if (command === undefined || flags.help) return out(HELP), 0;
     if (command === "mcp") {
       const { startMcp } = await import("./mcp.js");
-      await startMcp(createFileStore(dataPath(flags)), remoteFrom(flags));
+      // A URL with no token keeps the local tools and drops the sharing tools, so an exported URL never stops the server.
+      let remote: ReturnType<typeof remoteFrom>;
+      try {
+        remote = remoteFrom(flags);
+      } catch (error) {
+        if (!(error instanceof UsageError)) throw error;
+        err(`${error.message}: the sharing tools are off`);
+      }
+      await startMcp(createFileStore(dataPath(flags)), remote);
       return 0;
     }
     if (SHARE_COMMANDS.has(command)) {

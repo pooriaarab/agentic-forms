@@ -15,6 +15,8 @@ export type ShareRole = "owner" | "editor" | "viewer";
 export type SubjectKind = "human" | "agent";
 /** An invite or a link gives editor or viewer. Only a grant makes an owner. */
 export type InviteRole = "editor" | "viewer";
+/** A role a listed invite or link can hold. This API makes editor and viewer. A row made by agentic-identity may also be commenter. */
+export type ListedRole = InviteRole | "commenter";
 export interface InviteInput {
   role: InviteRole;
   /** The person to invite. Give this or `handle`. */
@@ -33,7 +35,7 @@ export interface LinkInput {
 export interface FormInvite {
   id: string;
   resourceId: string;
-  role: InviteRole;
+  role: ListedRole;
   for: "email" | "handle";
   handle?: string;
   expiresAt?: number;
@@ -43,7 +45,7 @@ export interface FormInvite {
 /** A link as a list shows it: no token. */
 export interface FormLink {
   id: string;
-  role: InviteRole;
+  role: ListedRole;
   signedInOnly: boolean;
   expiresAt?: number;
   revokedAt?: number;

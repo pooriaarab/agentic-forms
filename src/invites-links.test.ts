@@ -51,7 +51,8 @@ describe("invites", () => {
   test("an invite row that grants a role no invite can give is not listed", async () => {
     await store.put("invites", "odd", { id: "odd", resourceId: "a", role: "owner", handle: "helper" });
     await store.put("invites", "fine", { id: "fine", resourceId: "a", role: "viewer", handle: "helper" });
-    expect((await json(await call(olga, "GET", "/a/invites"))).invites.map((i: { id: string }) => i.id)).toEqual(["fine"]);
+    await store.put("invites", "soft", { id: "soft", resourceId: "a", role: "commenter", handle: "helper" });
+    expect((await json(await call(olga, "GET", "/a/invites"))).invites.map((i: { id: string }) => i.id).sort()).toEqual(["fine", "soft"]);
   });
 
   test("bad input is 400 and stores nothing", async () => {
@@ -118,10 +119,20 @@ describe("share links", () => {
     expect((await json(await call(olga, "GET", "/a/links"))).links[0].revokedAt).toBe(NOW);
   });
 
+  test("an editor link is made and listed", async () => {
+    const link = await json(await call(olga, "POST", "/a/links", { role: "editor" }));
+    expect((await json(await call(olga, "GET", "/a/links"))).links).toEqual([{ id: link.id, role: "editor", signedInOnly: false }]);
+  });
+
   test("a link row that grants a role no link can give is not listed", async () => {
     await store.put("links", "odd", { id: "odd", resourceId: "a", role: "owner", tokenHash: "x", signedInOnly: false });
     await store.put("links", "bare", { id: "bare", resourceId: "a", tokenHash: "x" });
+    await store.put("links", "stale", { id: "stale", resourceId: "a", role: "viewer", tokenHash: "x", expiresAt: "2026-11-01" });
     expect((await json(await call(olga, "GET", "/a/links"))).links).toEqual([]);
+    // A commenter link works in agentic-identity, so the owner must see it and can revoke it.
+    await store.put("links", "soft", { id: "soft", resourceId: "a", role: "commenter", tokenHash: "x", signedInOnly: false });
+    expect((await json(await call(olga, "GET", "/a/links"))).links).toEqual([{ id: "soft", role: "commenter", signedInOnly: false }]);
+    expect((await call(olga, "DELETE", "/a/links/soft")).status).toBe(200);
   });
 
   test("a link of another form cannot be revoked here, even by an owner of both", async () => {

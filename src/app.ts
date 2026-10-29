@@ -15,6 +15,8 @@ import { VERSION } from "./version.js";
 const MAX_BODY = 65_536;
 const SUBJECT = SUBJECT_ID;
 /** The handle rule of agentic-identity for an agent. The invite route checks it, so a bad handle is a 400, not a 500. */
+/** The roles an invite or a link row may hold and still work. This API makes editor and viewer; the library also honors commenter. */
+const LISTED_ROLES: ReadonlySet<string> = new Set(["viewer", "commenter", "editor"]);
 const HANDLE = /^[a-z][a-z0-9_-]{1,31}$/;
 const publishBody = z.object({ expectedRevision: z.number().int().min(0).optional() }).strict();
 const by = (ctx: PrincipalContext) => (isMachineMade(ctx.kind) ? "agent" : "human");
@@ -310,8 +312,8 @@ export function createApp(options: AppOptions = {}) {
     const page = pageOf(c);
     if (page instanceof Response) return page;
     const listed = await sharing.listInvites(c.get("ctx"), c.req.param("id"), page);
-    // An invite with a role that no invite can give is not honored, so it is not listed.
-    return c.json({ ...listed, invites: listed.invites.filter((invite) => invite.role === "editor" || invite.role === "viewer") });
+    // An invite made by agentic-identity may carry commenter, which this API does not make but the library honors: list it. Owner and unknown roles are refused by the library, so they are not listed.
+    return c.json({ ...listed, invites: listed.invites.filter((invite) => LISTED_ROLES.has(invite.role)) });
   });
   // The token shows once, in this reply. Only its hash is stored.
   app.post(`${forms}/:id/links`, async (c) => {
@@ -332,10 +334,10 @@ export function createApp(options: AppOptions = {}) {
     const page = pageOf(c);
     if (page instanceof Response) return page;
     const rows = await store.query("links", { where: { resourceId: c.req.param("id") }, ...page });
-    // A row with no id or a role that a link cannot give is not honored, so it is not listed.
-    const links = rows.items.filter(({ data: d }) => typeof d.id === "string" && (d.role === "editor" || d.role === "viewer")).map(({ data: d }) => ({
+    // A row with no id, a role that a link cannot give, or an expiry that is not a number is refused by the library, so it is not listed. A commenter link is honored, so it is.
+    const links = rows.items.filter(({ data: d }) => typeof d.id === "string" && LISTED_ROLES.has(d.role as string) && (d.expiresAt === undefined || (typeof d.expiresAt === "number" && Number.isFinite(d.expiresAt)))).map(({ data: d }) => ({
       id: d.id as string,
-      role: d.role as "editor" | "viewer",
+      role: d.role as "viewer" | "commenter" | "editor",
       signedInOnly: d.signedInOnly === true,
       ...(typeof d.expiresAt === "number" ? { expiresAt: d.expiresAt } : {}),
       ...(d.revokedAt != null ? { revokedAt: typeof d.revokedAt === "number" ? d.revokedAt : 0 } : {}),

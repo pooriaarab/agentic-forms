@@ -18,7 +18,7 @@ Breaking change for code that composes the schemas. Read it before you upgrade. 
 
 - Move to `agentic-identity` 0.7.x and `agentic-design` 0.3.x. The package depends on these ranges now. The code needed no change.
 - The MCP SDK range starts at 1.23.0, the first version that accepts zod 4 schemas. An install that keeps an older lock file with SDK 1.22 or lower gets wrong tool schemas. Run `npm update @modelcontextprotocol/sdk` to move it.
-- Raise `zod` to 4.6.6. Versions below 4.6.6 can run out of memory while they validate an oversized constrained collection (GHSA-mrhx-c7xc-m3w5). Move `agentic-design` to 0.3.3, which uses zod 4, so an install has one zod copy. An install that keeps an older lock file pins `agentic-design` 0.3.2, which uses zod 3. Run `npm update agentic-design` to move it.
+- Raise `zod` to 4.6.6, from 3.x (see the breaking note above). Versions below 4.6.6 can run out of memory while they validate an oversized constrained collection (GHSA-mrhx-c7xc-m3w5). Move `agentic-design` to 0.3.3, which uses zod 4, so an install has one zod copy. An install that keeps an older lock file pins `agentic-design` 0.3.2, which uses zod 3. Run `npm update agentic-design` to move it.
 - The publish workflow runs one publish at a time for each ref. A second run waits for the first one to finish. This does not change the package.
 
 ## 0.6.0 - 2026-10-29

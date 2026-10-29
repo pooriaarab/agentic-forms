@@ -232,17 +232,18 @@ describe("eraseAccount", () => {
     expect((error as Error).message).toMatch(/migrateGrants/);
   });
 
-  it("erases a form whose only owner holds two owner grants, and stops before any grant goes when the standard one is missing", async () => {
+  it("stops before any data goes when an owner grant has a key that sharing does not honor", async () => {
     const store = createMemoryStore();
     await make(store, "ana-form", ctx("ana"));
     await store.put("grants", "ana-form:zz", { resourceId: "ana-form", subjectKind: "human", subjectId: "ana", role: "owner" });
     await make(store, "odd-form", ctx("ana"));
     await store.delete("grants", "odd-form:human:ana");
     await store.put("grants", "odd-form:old", { resourceId: "odd-form", subjectKind: "human", subjectId: "ana", role: "owner" });
-    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form odd-form/);
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form (ana|odd)-form/);
     expect(await store.get("grants", "odd-form:old")).not.toBeNull();
     expect(await store.get("forms", "odd-form")).not.toBeNull();
-    expect(await store.get("forms", "ana-form")).toBeNull();
+    expect(await store.get("forms", "ana-form")).not.toBeNull();
+    expect((await all(store, "responses")).length).toBe(2);
   });
 
   it("stops before any data goes when sharing would refuse the resource erase", async () => {
@@ -272,6 +273,18 @@ describe("eraseAccount", () => {
     await make(store, "ana-form", ctx("ana"));
     await store.put("resources", "ana-form", { id: "ana-form", type: "form", parentId: "ghost" });
     await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form ana-form/);
+    expect(await store.get("forms", "ana-form")).not.toBeNull();
+  });
+
+  it("stops on a parent id that is not text, and on another owner under an odd key", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    await store.put("resources", "ana-form", { id: "ana-form", type: "form", parentId: 5 as never });
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form ana-form/);
+    await store.put("resources", "ana-form", { id: "ana-form", type: "form" });
+    await store.put("grants", "ana-form:odd", { resourceId: "ana-form", subjectKind: "human", subjectId: "bob", role: "owner" });
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form ana-form/);
+    expect(await store.get("grants", "ana-form:human:ana")).not.toBeNull();
     expect(await store.get("forms", "ana-form")).not.toBeNull();
   });
 });

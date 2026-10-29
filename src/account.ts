@@ -62,8 +62,12 @@ async function noOtherOwner(store: Store, formId: string, subject: Subject): Pro
     if (resource === null) throw new Error("a folder above the form is missing");
     const owners = (await store.query("grants", { where: { resourceId: id, role: "owner" }, limit: MAX_OWNERS_ON_ERASE + 1 })).items;
     if (owners.some((o) => !(SUBJECT_KINDS as readonly unknown[]).includes(o.data.subjectKind))) throw new Error("an owner grant has no valid kind");
+    // Sharing reads an owner only under the standard key. An owner under another key could pass for a second owner here and give no admin there.
+    if (owners.some((o) => o.id !== `${id}:${String(o.data.subjectKind)}:${String(o.data.subjectId)}`)) throw new Error("an owner grant has a key that sharing does not honor");
     if (owners.some((o) => o.data.subjectKind !== subject.kind || o.data.subjectId !== subject.id)) return false;
-    id = typeof resource.parentId === "string" && resource.parentId !== "" ? resource.parentId : undefined;
+    const parent: unknown = resource.parentId;
+    if (parent !== undefined && parent !== null && (typeof parent !== "string" || parent === "")) throw new Error("a resource has a parent id that is not text");
+    id = parent ?? undefined;
   }
   return true;
 }

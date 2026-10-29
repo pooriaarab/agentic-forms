@@ -8,7 +8,7 @@ import { ApiError, createClient } from "../src/client.js";
 
 const TOKEN = "e2e-client-token-0123456789-0123456789";
 const RATE_SECRET = "e2e-rate-secret-0123456789-0123456789";
-const PORT = 8830;
+const PORT = 8870; // the Worker e2e file uses 8799 to 8840
 const baseUrl = `http://127.0.0.1:${PORT}`;
 // The inspector port is not the default, so this file can run next to the Worker e2e file.
 // Close each connection, as the Worker e2e does, so an idle socket is never reused.
@@ -108,6 +108,18 @@ describe("remote client against the Worker", () => {
     expect(await pending).toMatchObject({ name: "AbortError" });
   });
 
+  test("an id of dots never reaches another route", async () => {
+    const seen: string[] = [];
+    const spy: typeof fetch = async (input) => (seen.push(String(input)), new Response("{}"));
+    const api = createClient({ baseUrl, token: TOKEN, fetch: spy });
+    for (const bad of ["..", ".", ""]) {
+      expect(await caught(api.purge(bad))).toBeInstanceOf(TypeError);
+      expect(await caught(api.publishForm(bad))).toBeInstanceOf(TypeError);
+      expect(await caught(api.revokeShare("f", bad, "human"))).toBeInstanceOf(TypeError);
+    }
+    expect(seen).toEqual([]);
+  });
+
   test("a failed call is never retried", async () => {
     let calls = 0;
     const counting: typeof fetch = (input, init) => (calls++, fetchClose(input, init));
@@ -158,6 +170,7 @@ describe("the client without a token", () => {
     expect(() => createClient({ baseUrl, token: "" })).toThrow(TypeError);
     expect(() => createClient({ baseUrl: "forms.example.com", token: "t" })).toThrow(TypeError);
     expect(() => createClient({ baseUrl: "https://x.test/?a=1", token: "t" })).toThrow(TypeError);
+    expect(() => createClient({ baseUrl: "https://u:p@x.test", token: "t" })).toThrow(TypeError);
     expect(() => createClient({ baseUrl: "https://x.test?", token: "t" })).toThrow(TypeError);
     expect(() => createClient({ baseUrl: "https://x.test#", token: "t" })).toThrow(TypeError);
   });

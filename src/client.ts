@@ -62,12 +62,17 @@ export function createClient(options: ClientOptions) {
   } catch {
     throw new TypeError("baseUrl must be an absolute URL");
   }
+  if (parsed.username !== "" || parsed.password !== "") throw new TypeError("baseUrl must have no user info: pass the token instead");
   if (parsed.search !== "" || parsed.hash !== "") throw new TypeError("baseUrl must have no query or fragment");
   // An empty "?" or "#" at the end passes the check above, so the base is built from the parsed parts.
   if (/[?#]/.test(options.baseUrl)) throw new TypeError("baseUrl must have no query or fragment");
   const base = (parsed.origin + parsed.pathname).replace(/\/+$/, "");
   const doFetch = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init));
-  const id = encodeURIComponent;
+  // encodeURIComponent keeps dots, and a "." or ".." segment makes the URL parser change the route.
+  const id = (value: string) => {
+    if (typeof value !== "string" || value === "" || /^\.{1,2}$/.test(value)) throw new TypeError(`"${String(value)}" is not a valid id`);
+    return encodeURIComponent(value);
+  };
 
   async function send(method: string, path: string, opts: { body?: unknown; query?: Record<string, string | number | undefined>; auth?: boolean } & CallOptions): Promise<Response> {
     const url = new URL(base + path);
@@ -107,7 +112,7 @@ export function createClient(options: ClientOptions) {
   };
   const form = (formId: string) => `/api/v1/forms/${id(formId)}`;
 
-  return {
+  const methods = {
     /** GET /health. Needs no token. */
     health: (call: CallOptions = {}) => json<{ ok: true; version: string }>("GET", "/health", { signal: call.signal, auth: false }),
     /** GET /api/v1/forms. The forms the token's principal holds a role on. */
@@ -154,6 +159,8 @@ export function createClient(options: ClientOptions) {
     submit: (formId: string, answers: Answers, submitOptions: { consent?: boolean } & CallOptions = {}) =>
       json<{ ok: true }>("POST", `/f/${id(formId)}`, { signal: submitOptions.signal, auth: false, body: { answers, consent: submitOptions.consent } }),
   };
+  // A refused id throws before a request is built. The wrapper turns that throw into a rejection, so every fault reaches the caller the same way.
+  return Object.fromEntries(Object.entries(methods).map(([name, method]) => [name, async (...args: unknown[]) => (method as (...a: unknown[]) => unknown)(...args)])) as typeof methods;
 }
 
 export type Client = ReturnType<typeof createClient>;

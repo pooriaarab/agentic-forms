@@ -79,7 +79,9 @@ There is one method per API route: `health`, `listForms`, `createForm`, `getForm
 - Every method takes `{ signal }` last, to cancel the call with an `AbortSignal`. A cancel rejects with the reason of the signal (an `AbortError` by default).
 - The client never retries. A retry of `createForm`, `submit`, or `purge` could repeat the write, so the caller decides.
 - `token` is optional. Without it, only `health` and `submit` work, so a browser page can submit with no secret. Any other call rejects with a `TypeError` before it sends.
-- `baseUrl` must be an absolute URL with no query or fragment. `createClient` throws a `TypeError` at once if it is not.
+- In a browser, the page must have the same origin as the Worker. The Worker sends no CORS headers.
+- An id of `.` or `..` rejects with a `TypeError`, so it can never change the route.
+- `baseUrl` must be an absolute URL with no query, fragment, or user info. `createClient` throws a `TypeError` at once if it is not.
 - A 2xx reply that is not JSON rejects with `ApiError` (`code` is `bad_response`).
 - Pass `fetch` to `createClient` to use a proxy or a test double. For a service binding, pass `(input, init) => env.FORMS.fetch(input, init)`.
 

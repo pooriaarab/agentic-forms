@@ -68,7 +68,7 @@
     "deploy:demo": "npm run build:ui && WRANGLER_SEND_METRICS=false wrangler deploy -c wrangler.demo.jsonc"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@modelcontextprotocol/sdk": "^1.23.0",
     "agentic-design": "^0.3.2",
     "agentic-identity": "^0.7.0",
     "hono": "^4.13.14",

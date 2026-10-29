@@ -97,6 +97,9 @@ describe("cli flow", () => {
     expect(lines[0]).toBe("response_id,submitted_at,form_version,color,why,extra");
     expect(lines).toHaveLength(3);
     expect(lines[2]).toContain('"warm, ""bold"""');
+    const listed = json(cli(["list"]).out).forms as { id: string; title: string }[];
+    expect(listed.find((f) => f.id === "poll")).toMatchObject({ title: "Poll 3" });
+    expect(json(cli(["show", "poll"]).out)).toMatchObject({ id: "poll", status: "published" });
   });
 
   test("from-prompt takes a JSON spec on stdin and can publish it", () => {
@@ -104,6 +107,11 @@ describe("cli flow", () => {
     expect(json(cli(["from-prompt", "--spec", "-", "--publish"], JSON.stringify(spec)).out).status).toBe("published");
     expect(cli(["submit", "quick", "--answers", '{"n":0}']).code).toBe(1);
     expect(cli(["submit", "quick", "--answers", '{"n":2}']).code).toBe(0);
+  });
+
+  test("an export with no answers still has the question columns", () => {
+    cli(["from-prompt", "--spec", "-", "--publish"], JSON.stringify({ id: "blank", title: "Blank", sections: [{ id: "s", title: "S", questions: [{ id: "q1", type: "short_text", label: "Q1" }] }] }));
+    expect(cli(["export", "blank"]).out).toBe("response_id,submitted_at,form_version,q1");
   });
 
   test("the data file is private to the user", () => {

@@ -92,6 +92,10 @@ export function createOps(store: Store) {
       await get(formId);
       return repo.publish(formId, options);
     },
+    /** Every form in the store. The local CLI and MCP have no signed-in caller, so they list all. HTTP lists by grants. */
+    async list(): Promise<{ forms: Form[] }> {
+      return { forms: await repo.list() };
+    },
     async submit(formId: string, answers: Answers, consent = false) {
       await get(formId);
       return responses.submit(formId, answers, { consent });

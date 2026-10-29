@@ -24,6 +24,7 @@ form logic. A submit checks the answers against the newest published version.
 | add_question | Add one question. Editing a published form starts a new draft version. |
 | update_form | Replace the title and sections. Edits, reorders, or removes questions. An absent notice or retentionDays is kept: send null to remove one. Pass expectedRevision (the form's `revision`, 0 if unset) so you never overwrite a newer change. Editing a published form starts a new draft version. |
 | publish_form | Open the form to answers. |
+| list_forms | List the forms in the store. |
 | get_form | Read a form. |
 | submit_response | Store one response. Pass consent when the form has a notice. |
 | list_responses | Read responses as rows, oldest first. |

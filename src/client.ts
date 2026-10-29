@@ -32,7 +32,8 @@ export interface LinkInput {
 /** An invite as a list shows it: no email. */
 export interface FormInvite {
   id: string;
-  role: string;
+  resourceId: string;
+  role: InviteRole;
   for: "email" | "handle";
   handle?: string;
   expiresAt?: number;
@@ -42,7 +43,7 @@ export interface FormInvite {
 /** A link as a list shows it: no token. */
 export interface FormLink {
   id: string;
-  role: string;
+  role: InviteRole;
   signedInOnly: boolean;
   expiresAt?: number;
   revokedAt?: number;

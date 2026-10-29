@@ -42,6 +42,12 @@ describe("invites", () => {
     expect(JSON.stringify(invites)).not.toContain("example.com");
   });
 
+  // The route checks a handle with its own copy of the library rule. These edges must agree with the library, so a drift fails here.
+  test("a handle at the edge of the library rule is accepted, and one past it is refused", async () => {
+    for (const handle of ["ab", "a".repeat(32), "a-b_9"]) expect((await call(olga, "POST", "/a/invites", { role: "viewer", handle })).status, handle).toBe(201);
+    for (const handle of ["a", "a".repeat(33), "A1", "-ab"]) expect((await call(olga, "POST", "/a/invites", { role: "viewer", handle })).status, handle).toBe(400);
+  });
+
   test("bad input is 400 and stores nothing", async () => {
     const bad = [
       { role: "owner", handle: "x" },
@@ -50,6 +56,7 @@ describe("invites", () => {
       { role: "viewer" },
       { role: "viewer", email: "a@b.co", handle: "x" },
       { role: "viewer", email: "nope" },
+      { role: "viewer", email: `${"a".repeat(250)}@b.co` },
       { role: "viewer", handle: "has space" },
       { role: "viewer", handle: "Claude" },
       { role: "viewer", handle: "a" },

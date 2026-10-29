@@ -300,7 +300,7 @@ export function createApp(options: AppOptions = {}) {
     if (typeof terms === "string") return invalidShare(c, terms);
     const { email, handle } = body;
     if ((email === undefined) === (handle === undefined)) return invalidShare(c, "give an email or a handle, not both");
-    if (email !== undefined && (typeof email !== "string" || !/^[^\s@]+@[^\s@]+$/.test(email))) return invalidShare(c, "email is not valid");
+    if (email !== undefined && (typeof email !== "string" || email.length > 254 || !/^[^\s@]+@[^\s@]+$/.test(email))) return invalidShare(c, "email is not valid: it has one @ and at most 254 characters");
     if (handle !== undefined && (typeof handle !== "string" || !HANDLE.test(handle))) return invalidShare(c, "handle is a lowercase letter, then 1 to 31 of a-z, 0-9, \"-\" and \"_\"");
     return c.json(await sharing.createInvite(c.get("ctx"), c.req.param("id"), { ...terms, ...(email === undefined ? { handle: handle as string } : { email: email as string }) }), 201);
   });
@@ -333,7 +333,7 @@ export function createApp(options: AppOptions = {}) {
     // A row with no id or a role that a link cannot give is not honored, so it is not listed.
     const links = rows.items.filter(({ data: d }) => typeof d.id === "string" && (d.role === "editor" || d.role === "viewer")).map(({ data: d }) => ({
       id: d.id as string,
-      role: d.role as string,
+      role: d.role as "editor" | "viewer",
       signedInOnly: d.signedInOnly === true,
       ...(typeof d.expiresAt === "number" ? { expiresAt: d.expiresAt } : {}),
       ...(d.revokedAt != null ? { revokedAt: typeof d.revokedAt === "number" ? d.revokedAt : 0 } : {}),

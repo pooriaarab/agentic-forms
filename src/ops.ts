@@ -3,6 +3,7 @@ import { formSpecSchema, questionSchema, type FormSpec } from "./core/schema.js"
 import { validateForm, type Answers, type Form } from "./core/form.js";
 import { FormError, createFormRepo } from "./core/repo.js";
 import { purgeRateLimits } from "./core/rate-limit.js";
+import { backfillOwners } from "./core/backfill.js";
 import { createResponses, purgeExpiredResponses } from "./core/responses.js";
 import type { Store } from "agentic-identity";
 
@@ -76,6 +77,8 @@ export function createOps(store: Store) {
       }
       return { purged: purged.value, rateLimits: rateLimits.value };
     },
+    /** Gives forms made before roles an owner row for `owner`. Safe to run again. */
+    backfillOwners: (owner: string) => backfillOwners(store, owner),
     async purge(formId: string) {
       await get(formId);
       return { purged: await responses.purgeExpired(formId) };

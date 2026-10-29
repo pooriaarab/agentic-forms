@@ -27,6 +27,7 @@ Commands:
   export <id>                                                  Print responses as CSV.
   purge <id>                                                   Delete responses past retention.
   purge-all                                                    Delete expired responses of every form.
+  backfill-owners --owner <id>                                 Give forms made before roles an owner. Safe to run again.
   mcp                                                          Start the MCP server on stdio.
 
 Flags:
@@ -132,6 +133,9 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
         return 0;
       case "purge-all":
         out(JSON.stringify(await ops.purgeAll()));
+        return 0;
+      case "backfill-owners":
+        out(JSON.stringify(await ops.backfillOwners(str("owner"))));
         return 0;
       case "purge":
         out(JSON.stringify(await ops.purge(need())));

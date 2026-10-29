@@ -234,6 +234,14 @@ export function createApp(options: AppOptions = {}) {
     return c.json(await ops.purgeAll(now()));
   });
 
+  // For forms made before roles. Only a caller with the all-forms admin scope may run it.
+  app.post("/api/v1/backfill-owners", async (c) => {
+    if (!hasScope(c.get("ctx").scopes, "*:admin")) throw new AccessError(403);
+    const { owner } = await c.req.json();
+    if (typeof owner !== "string" || !SUBJECT.test(owner)) return c.json({ error: "invalid_owner", message: 'give an owner of letters, digits, "-" and "_"' }, 400);
+    return c.json(await ops.backfillOwners(owner));
+  });
+
   app.onError((error, c) => {
     if (error instanceof AccessError) return c.json({ error: error.status === 404 ? "not_found" : "forbidden" }, error.status);
     if (error instanceof OpsError) return c.json({ error: error.kind, message: error.message }, error.kind === "not_found" ? 404 : 409);

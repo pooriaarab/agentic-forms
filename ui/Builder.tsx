@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, IconButton, Input, Tabs, useToast } from "agentic-design/react";
+import { Button, IconButton, Input, Menu, Tabs, useToast } from "agentic-design/react";
 import type { Client } from "../src/client.js";
 import type { Form, Question, Section } from "../src/core/form.js";
 import { Preview } from "./Preview.js";
-import { QuestionDialog, typeLabel } from "./QuestionDialog.js";
+import { QuestionDialog, TYPES, typeLabel } from "./QuestionDialog.js";
 import { Responses } from "./Responses.js";
 import { AgentMark, ErrorBox, Gate, None, canon, isConflict, setUnsaved, useLoad } from "./lib.js";
 
-type Edit = { section: number; index: number | "new" };
+type Edit = { section: number; index: number | "new"; type?: Question["type"] };
 const icon = (d: string) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d={d} />
@@ -21,6 +21,7 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
   const [sections, setSections] = useState<Section[]>(initial.sections);
   const [edit, setEdit] = useState<Edit | undefined>();
   const [opener, setOpener] = useState<HTMLElement | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; text: string } | undefined>();
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState<"save" | "publish" | undefined>();
   const toast = useToast();
@@ -35,6 +36,14 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
       setUnsaved(false);
     };
   }, [dirty]);
+  const rename = (si: number, qi: number, text: string | undefined) => {
+    setRenaming(undefined);
+    const q = sections[si]!.questions[qi]!;
+    const label = text?.trim();
+    if (label && label !== q.label) patch(si, sections[si]!.questions.map((x, i) => (i === qi ? { ...x, label } : x)));
+    // The row stays, so focus goes back to the name that was edited.
+    requestAnimationFrame(() => root.current?.querySelector<HTMLButtonElement>(`button[data-rename="${CSS.escape(q.id)}"]`)?.focus());
+  };
   // A change moves or removes the control that had focus. This puts focus back on a control that is still there.
   const root = useRef<HTMLDivElement>(null);
   const [refocus, setRefocus] = useState<{ label: string } | undefined>();
@@ -106,20 +115,39 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
 
   const builder = (
     <div className="af-stack">
-      <Input label="Form title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <div className="af-title-field"><Input label="Form title" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
       {sections.map((s, si) => (
         <section key={s.id} className="af-stack" aria-labelledby={`sec-${si}`}>
-          <h2 id={`sec-${si}`} style={{ margin: 0, fontSize: "var(--agd-font-size-lg)" }}>
+          <h2 id={`sec-${si}`} className="af-section-title">
             {s.title}
           </h2>
           {s.questions.length === 0 ? (
-            <None title="No questions in this section" description="Add the first question." />
+            <div className="af-empty-hint">
+              <None title="No questions in this section" description="Pick a type below to add the first question." />
+            </div>
           ) : (
             <ol className="af-list" aria-label={`Questions in ${s.title}`}>
               {s.questions.map((q, qi) => (
                 <li className="af-item" key={q.id}>
                   <div className="af-item__main">
-                    <div className="af-item__label">{q.label}</div>
+                    {renaming?.id === q.id ? (
+                      <input
+                        className="agd-input"
+                        aria-label={`Question: ${q.label}`}
+                        autoFocus
+                        value={renaming.text}
+                        onChange={(e) => setRenaming({ id: q.id, text: e.target.value })}
+                        onBlur={() => rename(si, qi, renaming.text)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") rename(si, qi, renaming.text);
+                          if (e.key === "Escape") rename(si, qi, undefined);
+                        }}
+                      />
+                    ) : (
+                      <button type="button" className="af-rename af-item__label" data-rename={q.id} aria-label={`Rename: ${q.label}`} title="Click to rename" onClick={() => setRenaming({ id: q.id, text: q.label })}>
+                        {q.label}
+                      </button>
+                    )}
                     <div className="af-row">
                       <span className="af-tag">{typeLabel(q.type)}</span>
                       {q.required && <span className="af-tag">Required</span>}
@@ -127,7 +155,7 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
                       {q.madeBy === "agent" && <AgentMark what="changed this" />}
                     </div>
                   </div>
-                  <div className="af-row">
+                  <div className="af-row af-item__tools">
                     <IconButton label={`Move up: ${q.label}`} icon={ICONS.up} size="sm" disabled={qi === 0} onClick={() => move(si, qi, -1)} />
                     <IconButton label={`Move down: ${q.label}`} icon={ICONS.down} size="sm" disabled={qi === s.questions.length - 1} onClick={() => move(si, qi, 1)} />
                     <IconButton label={`Edit: ${q.label}`} icon={ICONS.edit} size="sm" onClick={(e) => (setOpener(e.currentTarget), setEdit({ section: si, index: qi }))} />
@@ -137,8 +165,17 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
               ))}
             </ol>
           )}
-          <div>
-            <Button data-add="" onClick={(e) => (setOpener(e.currentTarget), setEdit({ section: si, index: "new" }))}>Add question{sections.length > 1 ? ` to ${s.title}` : ""}</Button>
+          <div className="af-add">
+            <Menu
+              trigger={<Button data-add="" data-section={si}>Add question{sections.length > 1 ? ` to ${s.title}` : ""}</Button>}
+              items={TYPES.map((t) => ({
+                label: t.label,
+                onSelect: () => {
+                  setOpener(root.current?.querySelector<HTMLElement>(`button[data-add][data-section="${si}"]`) ?? null);
+                  setEdit({ section: si, index: "new", type: t.value });
+                },
+              }))}
+            />
           </div>
         </section>
       ))}
@@ -194,6 +231,7 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
           key={`${edit.section}-${edit.index}`}
           open
           question={editing}
+          initialType={edit.type}
           earlier={earlier}
           taken={flat.map((q) => q.id)}
           onOpenChange={(open) => !open && closeDialog(opener)}

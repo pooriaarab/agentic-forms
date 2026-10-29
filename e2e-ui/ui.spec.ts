@@ -28,8 +28,12 @@ const cspErrors = (page: Page) => {
   return seen;
 };
 
+const TYPE_LABELS: Record<string, string> = { short_text: "Short text", single_choice: "Single choice", number: "Number", rating: "Rating" };
 const addQuestion = async (page: Page, label: string, type: string, extra?: (dialog: ReturnType<Page["getByRole"]>) => Promise<void>) => {
+  // The types menu picks the type the dialog starts with.
   await page.getByRole("button", { name: /^Add question/ }).click();
+  await page.getByRole("menuitem", { name: TYPE_LABELS[type]! }).click();
+  await expect(page.getByRole("dialog", { name: "Add question" }).getByLabel("Type")).toHaveValue(type);
   const dialog = page.getByRole("dialog", { name: "Add question" });
   await dialog.getByLabel("Question", { exact: true }).fill(label);
   await dialog.getByLabel("Type").selectOption(type);
@@ -76,6 +80,8 @@ test("sign in, build a form, publish, fill it by link, read the response, reload
     await d.getByLabel("Required").check();
   });
   await page.getByRole("button", { name: /^Add question/ }).click();
+  await audit(page, "04-question-menu");
+  await page.getByRole("menuitem", { name: "Short text" }).click();
   await audit(page, "04-question-dialog");
   await page.keyboard.press("Escape");
   await addQuestion(page, "Favorite color", "single_choice", async (d) => {
@@ -88,6 +94,19 @@ test("sign in, build a form, publish, fill it by link, read the response, reload
   await page.getByRole("button", { name: "Edit: Throwaway" }).click();
   await page.getByRole("dialog", { name: "Edit question" }).getByLabel("Question", { exact: true }).fill("Team size");
   await page.getByRole("button", { name: "Save question" }).click();
+  // Click a name to rename it in place: Escape keeps the old name, Enter keeps the new one.
+  await page.getByRole("button", { name: "Rename: Your name" }).click();
+  await page.getByLabel("Question: Your name").fill("Ignored");
+  await page.keyboard.press("Escape");
+  await expectQuestions(page, ["Your name", "Favorite color", "Team size"]);
+  await expect(page.getByRole("button", { name: "Rename: Your name" })).toBeFocused();
+  await page.getByRole("button", { name: "Rename: Your name" }).click();
+  await page.getByLabel("Question: Your name").fill("Full name");
+  await page.keyboard.press("Enter");
+  await expectQuestions(page, ["Full name", "Favorite color", "Team size"]);
+  await page.getByRole("button", { name: "Rename: Full name" }).click();
+  await page.getByLabel("Question: Full name").fill("Your name");
+  await page.keyboard.press("Enter");
   await page.getByRole("button", { name: "Move up: Team size" }).click();
   await expectQuestions(page, ["Your name", "Team size", "Favorite color"]);
   await page.getByRole("button", { name: "Remove: Team size" }).click();
@@ -281,4 +300,21 @@ test("the built ./ui export mounts in a host page, lists forms, and unmounts", a
   await page.evaluate(() => (window as never as { handle: { unmount(): void } }).handle.unmount());
   await expect(page.locator("#forms")).toBeEmpty();
   expect(errors).toEqual([]);
+});
+
+test("the builder stays inside a 390px screen and the row tools stay reachable by keyboard", async ({ page, request }) => {
+  await signIn(page);
+  const id = `small-${Date.now().toString(36)}`;
+  const long = "A long question that has to wrap on a small screen without cutting any word";
+  await request.post("/api/v1/forms", { headers: { authorization: `Bearer ${TOKEN}` }, data: { id, title: "Small", sections: [{ id: "main", title: "Questions", questions: [{ id: "a", type: "short_text", label: long }] }] } });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(`/ui/#/forms/${id}`);
+  await expect(page.getByRole("button", { name: `Rename: ${long}` })).toBeVisible();
+  // Nothing is wider than the screen.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  // The hover-only tools show when focus is inside the row.
+  await page.getByRole("button", { name: `Rename: ${long}` }).focus();
+  await expect(page.getByRole("button", { name: `Edit: ${long}` })).toBeVisible();
+  await expect.poll(() => page.getByRole("button", { name: `Edit: ${long}` }).evaluate((el) => getComputedStyle(el.parentElement!).opacity)).toBe("1");
+  await page.screenshot({ path: `${SHOTS}/12-builder-narrow.png` });
 });

@@ -74,7 +74,7 @@ Every sharing call needs the owner role:
 | List share links | `listLinks` | `links` | `list_links` | `GET /links` |
 | Revoke a share link | `revokeLink` | `unlink --link <id>` | `revoke_link` | `DELETE /links/:link` |
 
-An invite or a link gives `editor` or `viewer`, never `owner`: only a share makes an owner. An invite names an `email` (a person) or a `handle` (an agent). `expiresInMs` (`--expires-in-ms`) sets how long it lives. `signedInOnly` (`--signed-in-only`) limits a link to signed-in people. A list shows no email and no link token: the token shows once, in the reply that makes the link. Accepting an invite and opening a link are part of `agentic-identity`.
+An invite or a link gives `editor` or `viewer`, never `owner`: only a share makes an owner. An invite names an `email` (a person) or a `handle` (an agent). `expiresInMs` (`--expires-in-ms`) sets how long it lives. `signedInOnly` (`--signed-in-only`) limits a link to signed-in people. A list shows no email and no link token: the token shows once, in the reply that makes the link. This Worker only makes and manages invites and links. To accept an invite or open a link, run `agentic-identity` on the same store.
 
 The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it). The file uses the store format of agentic-identity. A file written by 0.5.0 or earlier is refused and not migrated.
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.
@@ -186,7 +186,7 @@ What you can do in it:
 - List forms, and make a new one.
 - Build a form: add, edit, reorder, and remove questions of every type, with choices, limits, and a "show only when" condition. Save sends the whole draft. A save that follows a change made elsewhere is refused, and the page asks you to reload.
 - Preview the form. The preview shows and hides questions by their conditions and sends nothing.
-- Publish, and copy the share link `/f/<id>`. The link opens the public fill page, which uses the same tokens, in light and dark.
+- Publish, and copy the public link `/f/<id>`. The link opens the public fill page, which uses the same tokens, in light and dark.
 - Read the responses in a table (100 per page) and export them as CSV.
 - See which questions an agent made or changed. The server sets that mark from the caller. Only a person (a principal of kind `human`) makes human-marked questions. Every other kind, such as an agent, a delegated agent, or a personal token used by an agent, is marked as an agent. A credential of an agent principal shows the agent mark on every question it makes.
 
@@ -233,7 +233,7 @@ forms.unmount(); // remove the UI
 
 `getToken` may return a promise. An empty token, or a refused call, shows as an error in the UI. The person presses Try again after the token is valid. A missing
 `getToken` or a bad `baseUrl` throws a `TypeError` and renders nothing. The server still checks every call against
-the token. The share link of a form points at `baseUrl`. The pages follow the address hash
+the token. The public link of a form points at `baseUrl`. The pages follow the address hash
 (`#/forms/<id>`), so they own that hash while mounted. `react` and `react-dom` (version 19) are peer dependencies.
 `createClient` from `agentic-forms/client` also accepts a function for `token`.
 

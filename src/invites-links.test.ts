@@ -51,6 +51,11 @@ describe("invites", () => {
       { role: "viewer", email: "a@b.co", handle: "x" },
       { role: "viewer", email: "nope" },
       { role: "viewer", handle: "has space" },
+      { role: "viewer", handle: "Claude" },
+      { role: "viewer", handle: "a" },
+      { role: "viewer", handle: "1bot" },
+      { role: "viewer", handle: "b".repeat(33) },
+      { role: "viewer", handle: "x", expiresInMs: Number.MAX_SAFE_INTEGER },
       { role: "viewer", handle: "x", expiresInMs: -5 },
       { role: "viewer", handle: "x", expiresInMs: "9" },
     ];
@@ -84,10 +89,26 @@ describe("share links", () => {
   });
 
   test("bad input is 400 and stores nothing", async () => {
-    for (const body of [{ role: "owner" }, { role: "viewer", signedInOnly: "yes" }, { role: "viewer", expiresInMs: 0 }, {}, []]) {
+    for (const body of [{ role: "owner" }, { role: "viewer", signedInOnly: "yes" }, { role: "viewer", expiresInMs: 0 }, { role: "viewer", expiresInMs: Number.MAX_SAFE_INTEGER }, {}, []]) {
       expect((await call(olga, "POST", "/a/links", body)).status, JSON.stringify(body)).toBe(400);
     }
     expect((await store.query("links")).items).toHaveLength(0);
+  });
+
+  test("a second revoke keeps the first revoke time and the audit trail short", async () => {
+    const link = await json(await call(olga, "POST", "/a/links", { role: "viewer" }));
+    expect((await call(olga, "DELETE", `/a/links/${link.id}`)).status).toBe(200);
+    const audits = async () => (await store.query("audit")).items.filter((i) => i.data.action === "link.revoke").length;
+    expect(await audits()).toBe(1);
+    expect((await call(olga, "DELETE", `/a/links/${link.id}`)).status).toBe(200);
+    expect(await audits()).toBe(1);
+    expect((await json(await call(olga, "GET", "/a/links"))).links[0].revokedAt).toBe(NOW);
+  });
+
+  test("a link row that grants a role no link can give is not listed", async () => {
+    await store.put("links", "odd", { id: "odd", resourceId: "a", role: "owner", tokenHash: "x", signedInOnly: false });
+    await store.put("links", "bare", { id: "bare", resourceId: "a", tokenHash: "x" });
+    expect((await json(await call(olga, "GET", "/a/links"))).links).toEqual([]);
   });
 
   test("a link of another form cannot be revoked here, even by an owner of both", async () => {

@@ -14,6 +14,8 @@ import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
 const SUBJECT = SUBJECT_ID;
+/** The handle rule of agentic-identity for an agent. The invite route checks it, so a bad handle is a 400, not a 500. */
+const HANDLE = /^[a-z][a-z0-9_-]{1,31}$/;
 const publishBody = z.object({ expectedRevision: z.number().int().min(0).optional() }).strict();
 const by = (ctx: PrincipalContext) => (isMachineMade(ctx.kind) ? "agent" : "human");
 const isSubjectKind = (kind: unknown): kind is SubjectKind => SUBJECT_KINDS.includes(kind as SubjectKind);
@@ -284,7 +286,7 @@ export function createApp(options: AppOptions = {}) {
   const shareTerms = (body: Record<string, unknown>): { role: "editor" | "viewer"; expiresInMs?: number } | string => {
     if (body.role !== "editor" && body.role !== "viewer") return "give a role of editor or viewer";
     const ms = body.expiresInMs;
-    if (ms !== undefined && (typeof ms !== "number" || !Number.isSafeInteger(ms) || ms <= 0)) return "expiresInMs is a whole number of milliseconds above 0";
+    if (ms !== undefined && (typeof ms !== "number" || !Number.isSafeInteger(ms) || ms <= 0 || !Number.isSafeInteger(now() + ms))) return "expiresInMs is a whole number of milliseconds above 0, and it ends at a time that fits";
     return { role: body.role, ...(ms === undefined ? {} : { expiresInMs: ms }) };
   };
   const readBody = async (c: Context): Promise<Record<string, unknown>> => {
@@ -299,7 +301,7 @@ export function createApp(options: AppOptions = {}) {
     const { email, handle } = body;
     if ((email === undefined) === (handle === undefined)) return invalidShare(c, "give an email or a handle, not both");
     if (email !== undefined && (typeof email !== "string" || !/^[^\s@]+@[^\s@]+$/.test(email))) return invalidShare(c, "email is not valid");
-    if (handle !== undefined && (typeof handle !== "string" || !SUBJECT.test(handle))) return invalidShare(c, "handle is not valid");
+    if (handle !== undefined && (typeof handle !== "string" || !HANDLE.test(handle))) return invalidShare(c, "handle is a lowercase letter, then 1 to 31 of a-z, 0-9, \"-\" and \"_\"");
     return c.json(await sharing.createInvite(c.get("ctx"), c.req.param("id"), { ...terms, ...(email === undefined ? { handle: handle as string } : { email: email as string }) }), 201);
   });
   // An invite shows no email: it says whether it is for an email or a handle.
@@ -328,9 +330,10 @@ export function createApp(options: AppOptions = {}) {
     const page = pageOf(c);
     if (page instanceof Response) return page;
     const rows = await store.query("links", { where: { resourceId: c.req.param("id") }, ...page });
-    const links = rows.items.map(({ data: d }) => ({
-      id: String(d.id),
-      role: d.role,
+    // A row with no id or a role that a link cannot give is not honored, so it is not listed.
+    const links = rows.items.filter(({ data: d }) => typeof d.id === "string" && (d.role === "editor" || d.role === "viewer")).map(({ data: d }) => ({
+      id: d.id as string,
+      role: d.role as string,
       signedInOnly: d.signedInOnly === true,
       ...(typeof d.expiresAt === "number" ? { expiresAt: d.expiresAt } : {}),
       ...(d.revokedAt != null ? { revokedAt: typeof d.revokedAt === "number" ? d.revokedAt : 0 } : {}),
@@ -343,7 +346,8 @@ export function createApp(options: AppOptions = {}) {
     const linkId = c.req.param("link");
     const link = SUBJECT.test(linkId) ? await store.get("links", linkId) : null;
     if (link === null || link.resourceId !== c.req.param("id")) throw new OpsError("not_found", "no such link on this form");
-    await sharing.revokeLink(c.get("ctx"), linkId);
+    // A second revoke keeps the first revoke time and writes no second audit entry.
+    if (link.revokedAt == null) await sharing.revokeLink(c.get("ctx"), linkId);
     return c.json({ ok: true });
   });
   app.get(`${forms}/:id/audit`, async (c) => {

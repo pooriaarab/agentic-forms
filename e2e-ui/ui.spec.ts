@@ -28,7 +28,7 @@ const cspErrors = (page: Page) => {
   return seen;
 };
 
-const TYPE_LABELS: Record<string, string> = { short_text: "Short text", single_choice: "Single choice", number: "Number", rating: "Rating" };
+const TYPE_LABELS: Record<string, string> = { short_text: "Short text", long_text: "Long text", number: "Number", email: "Email", single_choice: "Single choice", multi_choice: "Multiple choice", dropdown: "Dropdown", date: "Date", rating: "Rating", file: "File" };
 const addQuestion = async (page: Page, label: string, type: string, extra?: (dialog: ReturnType<Page["getByRole"]>) => Promise<void>) => {
   // The types menu picks the type the dialog starts with.
   await page.getByRole("button", { name: /^Add question/ }).click();
@@ -36,7 +36,6 @@ const addQuestion = async (page: Page, label: string, type: string, extra?: (dia
   await expect(page.getByRole("dialog", { name: "Add question" }).getByLabel("Type")).toHaveValue(type);
   const dialog = page.getByRole("dialog", { name: "Add question" });
   await dialog.getByLabel("Question", { exact: true }).fill(label);
-  await dialog.getByLabel("Type").selectOption(type);
   await extra?.(dialog);
   await dialog.getByRole("button", { name: "Add question" }).click();
   await expect(dialog).toBeHidden();
@@ -106,6 +105,15 @@ test("sign in, build a form, publish, fill it by link, read the response, reload
   await expectQuestions(page, ["Full name", "Favorite color", "Team size"]);
   await page.getByRole("button", { name: "Rename: Full name" }).click();
   await page.getByLabel("Question: Full name").fill("Your name");
+  await page.keyboard.press("Enter");
+  // Leaving the field by Tab commits the name and leaves focus where the person went.
+  await page.getByRole("button", { name: "Rename: Your name" }).click();
+  await page.getByLabel("Question: Your name").fill("Tabbed");
+  await page.keyboard.press("Tab");
+  await expectQuestions(page, ["Tabbed", "Favorite color", "Team size"]);
+  await expect(page.getByRole("button", { name: "Move down: Tabbed" })).toBeFocused();
+  await page.getByRole("button", { name: "Rename: Tabbed" }).click();
+  await page.getByLabel("Question: Tabbed").fill("Your name");
   await page.keyboard.press("Enter");
   await page.getByRole("button", { name: "Move up: Team size" }).click();
   await expectQuestions(page, ["Your name", "Team size", "Favorite color"]);

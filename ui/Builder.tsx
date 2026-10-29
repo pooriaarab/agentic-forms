@@ -36,13 +36,17 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
       setUnsaved(false);
     };
   }, [dirty]);
-  const rename = (si: number, qi: number, text: string | undefined) => {
+  const renameOpen = useRef(false);
+  const startRename = (id: string, text: string) => ((renameOpen.current = true), setRenaming({ id, text }));
+  const rename = (si: number, qi: number, text: string | undefined, refocus = false) => {
+    if (!renameOpen.current) return; // Enter or Escape already closed it: a late blur does nothing.
+    renameOpen.current = false;
     setRenaming(undefined);
     const q = sections[si]!.questions[qi]!;
     const label = text?.trim();
     if (label && label !== q.label) patch(si, sections[si]!.questions.map((x, i) => (i === qi ? { ...x, label } : x)));
-    // The row stays, so focus goes back to the name that was edited.
-    requestAnimationFrame(() => root.current?.querySelector<HTMLButtonElement>(`button[data-rename="${CSS.escape(q.id)}"]`)?.focus());
+    // Enter and Escape put focus back on the name. Leaving by Tab or click keeps focus where the person went.
+    if (refocus) requestAnimationFrame(() => root.current?.querySelector<HTMLButtonElement>(`button[data-rename="${CSS.escape(q.id)}"]`)?.focus());
   };
   // A change moves or removes the control that had focus. This puts focus back on a control that is still there.
   const root = useRef<HTMLDivElement>(null);
@@ -139,12 +143,12 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
                         onChange={(e) => setRenaming({ id: q.id, text: e.target.value })}
                         onBlur={() => rename(si, qi, renaming.text)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") rename(si, qi, renaming.text);
-                          if (e.key === "Escape") rename(si, qi, undefined);
+                          if (e.key === "Enter" && !e.nativeEvent.isComposing) rename(si, qi, renaming.text, true);
+                          if (e.key === "Escape") rename(si, qi, undefined, true);
                         }}
                       />
                     ) : (
-                      <button type="button" className="af-rename af-item__label" data-rename={q.id} aria-label={`Rename: ${q.label}`} title="Click to rename" onClick={() => setRenaming({ id: q.id, text: q.label })}>
+                      <button type="button" className="af-rename af-item__label" data-rename={q.id} aria-label={`Rename: ${q.label}`} title="Click to rename" onClick={() => startRename(q.id, q.label)}>
                         {q.label}
                       </button>
                     )}

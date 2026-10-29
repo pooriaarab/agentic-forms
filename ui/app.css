@@ -32,7 +32,7 @@
 .af-section-title { margin: 0; font-size: var(--agd-font-size-lg); font-weight: var(--agd-font-weight-semibold); }
 .af-item__tools { opacity: 0; transition: opacity 120ms; }
 .af-item:hover .af-item__tools, .af-item:focus-within .af-item__tools { opacity: 1; }
-@media (hover: none) { .af-item__tools { opacity: 1; } }
+@media (any-hover: none), (pointer: coarse) { .af-item__tools { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .af-item, .af-item__tools { transition: none; } }
 .af-rename { all: unset; box-sizing: border-box; display: block; max-width: 100%; padding: 0 var(--agd-space-1); margin-inline: calc(var(--agd-space-1) * -1); border-radius: var(--agd-radius-sm); font-weight: var(--agd-font-weight-medium); overflow-wrap: anywhere; cursor: text; }
 .af-rename:hover { background: var(--agd-color-surface-sunken); }

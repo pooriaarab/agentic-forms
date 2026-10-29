@@ -1,6 +1,6 @@
 // The public fill page: one self-contained HTML document. No CDN, no third-party
 // script. The look comes from the agentic-design tokens, which the Worker serves at /ui/styles.css (self-hosted fonts); system fonts remain the fallback. Built for WCAG 2.2 AA: labels on every control,
-// visible focus, 44px targets, a text error summary, and no color-only cues.
+// visible focus, 40px targets (AA 2.5.8 needs 24px), a text error summary, and no color-only cues.
 import type { Form, Question } from "./core/form.js";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };

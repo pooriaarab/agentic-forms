@@ -98,7 +98,7 @@ What you can do in it:
 - Preview the form. The preview shows and hides questions by their conditions and sends nothing.
 - Publish, and copy the share link `/f/<id>`. The link opens the public fill page, which uses the same tokens, in light and dark.
 - Read the responses in a table (100 per page) and export them as CSV.
-- See which questions an agent made or changed. The server sets that mark from the caller. A person who signs in with a stored credential makes questions marked as human. The shared `FORMS_API_TOKEN` acts as an agent, so every question made through it shows the agent mark.
+- See which questions an agent made or changed. The server sets that mark from the caller. Only a person (a principal of kind `human`) makes human-marked questions. Every other kind, such as an agent, a delegated agent, or a personal token used by an agent, is marked as an agent. The shared `FORMS_API_TOKEN` acts as an agent, so every question made through it shows the agent mark.
 
 Run it on your machine:
 

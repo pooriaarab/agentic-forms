@@ -6,10 +6,10 @@
 //  5. A form with a second owner stays: only the subject's grant goes. A form shared to the subject stays.
 //  6. A person and an agent with one id are two subjects.
 //  7. A second erase counts zero and changes nothing.
-//  9. Audit rows with no known root kind, anonymous rows, delegated roots, and rows on other resource types are not matched.
+//  8. A form that cannot be erased stops the run and names the form id.
+//  9. Audit rows with no known root kind, anonymous rows, a delegated chain rooted in its first step, and rows on other resource types are not matched.
 // 10. A grant with no kind stops both calls. An owner grant with no kind keeps the form.
 // 11. A stop after the data went keeps the counts of that form in the message, and a repeat finishes.
-//  8. A form that cannot be erased stops the run and names the form id.
 import { createMemoryStore, createSharing, type PrincipalContext, type Store } from "agentic-identity";
 import { describe, expect, it } from "vitest";
 import { createOps } from "./ops.js";
@@ -172,5 +172,15 @@ describe("eraseAccount", () => {
     fail = false;
     expect(await formsAccount.eraseAccount(ANA, { store })).toMatchObject({ forms: 1, form_versions: 0, responses: 0 });
     expect(await store.get("forms", "ana-form")).toBeNull();
+  });
+
+  it("roots an audit entry of a delegated chain in the first step", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    await store.put("audit", "bot", { id: "bot", rootId: "ana", resourceId: "ana-form", chain: [{ id: "ana", kind: "human" }, { id: "bot", kind: "agent" }] });
+    await store.put("audit", "bot-agent", { id: "bot-agent", rootId: "ana", resourceId: "ana-form", chain: [{ id: "ana", kind: "agent" }, { id: "bot", kind: "agent" }] });
+    expect((await formsAccount.exportAccount(ANA, { store })).audit.map((a) => a.id)).toContain("bot");
+    expect((await formsAccount.exportAccount(ANA, { store })).audit.map((a) => a.id)).not.toContain("bot-agent");
+    expect((await formsAccount.exportAccount({ id: "ana", kind: "agent" }, { store })).audit.map((a) => a.id)).toEqual(["bot-agent"]);
   });
 });

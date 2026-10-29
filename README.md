@@ -189,7 +189,7 @@ const counts = await formsAccount.eraseAccount({ id: "ana", kind: "human" }, { s
 
 - The export has plain JSON in `forms`, `form_versions`, `responses` (the forms the subject owns, with their answers), `grants` (every role the subject holds on a form), and `audit` (the entries rooted in the subject).
 - The erase removes each form that the subject alone owns, with its snapshots, answers, grants, and audit entries, including the entries of other people on that form. A form with another owner stays, and only the subject's grant goes. The grants of the subject on other forms go too. Last, the audit entries rooted in the subject go. It returns counts by the same names.
-- A repeat of the erase counts zero. If it stops, the error names the form id, and a repeat goes on from there.
+- A repeat of the erase counts zero. If it stops, the error names the form id and the counts so far. A stop before the form row goes is finished by a repeat. Grants and audit entries on a form that is already gone are not matched and stay.
 - Answers hold no respondent id, so they are exported only with their form. A grant with no valid kind stops both calls: run `migrateGrants` first. Audit entries are matched only on forms, and only with a known root kind. Invites and links keep the id of their maker with no kind, so they leave only with their form.
 - The shape is provisional: a later `agentic-identity` release names it `AccountPackage`. Stop writes before you run the erase.
 

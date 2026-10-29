@@ -32,7 +32,7 @@ export interface FormsAccount {
    * Erases each form that the subject is the only owner of, with its snapshots, answers, grants, and audit entries. A form with
    * another owner stays: only the subject's grant goes, as do the grants the subject holds on forms of others. Last, the audit
    * entries rooted in the subject go. Counts by the collection names. Run it with writes stopped. A repeat finds nothing and counts zero.
-   * A failure names the form id: the repeat goes on from there, and the counts of the runs add up.
+   * A failure names the form id. A stop before the resource row goes is finished by a repeat, and the counts of the runs add up. A stop after it leaves nothing to find: the counts of that form are in the error message. Entries on a resource that is already gone are not matched and stay.
    * A grant with no valid kind stops both calls: run `migrateGrants` first. An audit entry with no known root kind, or on a resource that is not a form, is left alone. Invites and links record only the id of their maker, with no kind, so they are not matched to a subject: they leave with their form.
    */
   eraseAccount(subject: Subject, deps: FormsAccountDeps): Promise<Record<FormsCollection, number>>;

@@ -281,7 +281,7 @@ cd agentic-forms
 npm install && npm run dev
 ```
 
-`bun install && bun run dev` also works if npm is installed too. The scripts need macOS, Linux, or WSL. The `dev` script builds the UI. The Worker needs a `FORMS_RATE_SECRET` of 32 bytes or more, so the script writes a git-ignored `.dev.vars` with a random one if the file is missing. If you have a `.dev.vars` already, add the secret to it (see `.dev.vars.example`). Then the script starts `wrangler dev` on <http://localhost:8792>. Wrangler keeps a local D1 database. The `dev` script turns off Wrangler telemetry. Set `WRANGLER_SEND_METRICS=false` when you run other wrangler commands.
+You can also use `bun install && bun run dev`. The `dev` script calls npm, so npm must be installed. The scripts need macOS, Linux, or WSL. The `dev` script builds the UI. The Worker needs a `FORMS_RATE_SECRET` of 32 bytes or more. If `.dev.vars` is missing, the script writes it with a random secret. Git ignores the file. If you have a `.dev.vars` already, add the secret to it (see `.dev.vars.example`). Then the script starts `wrangler dev` on <http://localhost:8792>. Wrangler keeps a local D1 database. The `dev` script turns off Wrangler telemetry. Set `WRANGLER_SEND_METRICS=false` when you run other wrangler commands.
 
 ```sh
 curl -i http://localhost:8792/health   # 200

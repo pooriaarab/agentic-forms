@@ -79,7 +79,8 @@ async function formGrants(store: Store, subject: Subject) {
   const out: { id: string; resourceId: string; role: unknown; data: JsonRecord }[] = [];
   for await (const { id, data } of docs(store, "grants", { subjectId: subject.id })) {
     if (!(SUBJECT_KINDS as readonly unknown[]).includes(data.subjectKind)) throw new FormsAccountError("invalid_input", `a grant has no valid kind: run migrateGrants first (grant ${id})`);
-    if (data.subjectKind !== subject.kind || typeof data.resourceId !== "string") continue;
+    if (data.subjectKind !== subject.kind) continue;
+    if (typeof data.resourceId !== "string") throw new FormsAccountError("invalid_input", `a grant has no resource id (grant ${id})`);
     if ((await store.get("resources", data.resourceId))?.type !== "form") continue;
     out.push({ id, resourceId: data.resourceId, role: data.role, data: data as JsonRecord });
   }
@@ -97,7 +98,7 @@ async function auditOf(store: Store, subject: Subject) {
     const chain = doc.data.chain;
     const root = Array.isArray(chain) ? (chain[0] as { kind?: unknown } | undefined) : undefined;
     // A person and an agent with one id are two subjects. A delegated chain roots in its first step.
-    if (root?.kind !== subject.kind) continue;
+    if (root?.kind !== subject.kind || (root as { id?: unknown }).id !== subject.id) continue;
     const resourceId = doc.data.resourceId;
     if (typeof resourceId !== "string") continue;
     if (!isForm.has(resourceId)) isForm.set(resourceId, (await store.get("resources", resourceId))?.type === "form");
@@ -135,8 +136,11 @@ export const formsAccount: FormsAccount = {
     const ctx: PrincipalContext = { principalId: subject.id, kind: subject.kind, chain: [{ id: subject.id, kind: subject.kind }], scopes: ["form:admin"] };
     const sharing = createSharing(store);
     const ops = createOps(store);
+    const erased = new Set<string>();
     for (const grant of await formGrants(store, subject)) {
       const formId = grant.resourceId;
+      // A second grant of the subject on a form that went already is gone with it, and is not counted again.
+      if (erased.has(formId)) continue;
       try {
         const sole = grant.role === "owner" && (await soleOwner(store, formId));
         if (sole) {
@@ -152,6 +156,7 @@ export const formsAccount: FormsAccount = {
           counts.responses += first.erased;
           await sharing.deleteResource(ctx, formId);
           counts.forms += 1;
+          erased.add(formId);
           counts.grants += others;
           counts.audit += trail;
           counts.responses += (await ops.erase(formId)).erased;

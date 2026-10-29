@@ -202,4 +202,22 @@ describe("eraseAccount", () => {
     expect(await store.get("forms", "ana-form")).not.toBeNull();
     expect((await all(store, "responses")).length).toBe(1);
   });
+
+  it("stops on a grant with no resource id, and counts a duplicate grant once", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    await store.put("grants", "bad", { subjectKind: "human", subjectId: "ana", role: "editor" });
+    await expect(formsAccount.exportAccount(ANA, { store })).rejects.toThrow(/no resource id/);
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/no resource id/);
+    await store.delete("grants", "bad");
+    await store.put("grants", "ana-form:zz", { resourceId: "ana-form", subjectKind: "human", subjectId: "ana", role: "editor" });
+    expect(await formsAccount.eraseAccount(ANA, { store })).toMatchObject({ forms: 1, grants: 2 });
+  });
+
+  it("does not match an audit row whose chain root is another id", async () => {
+    const store = createMemoryStore();
+    await make(store, "bob-form", ctx("bob"));
+    await store.put("audit", "odd", { id: "odd", rootId: "ana", resourceId: "bob-form", chain: [{ id: "bob", kind: "human" }] });
+    expect((await formsAccount.exportAccount(ANA, { store })).audit).toEqual([]);
+  });
 });

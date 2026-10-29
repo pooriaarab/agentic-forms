@@ -149,6 +149,9 @@ describe("durable storage", () => {
       await start(8830 + i, TOKEN, { vars });
       expect((await fetch(`http://127.0.0.1:${8830 + i}/health`)).status, name).toBe(500);
     }
+    // The flag leaves "eu" strict: local D1 reports no region, so the first read fails.
+    await start(8840, TOKEN, { vars: ["FORMS_REGION:eu", "FORMS_UNSAFE_LOCAL_REGION:1"] });
+    expect((await fetch("http://127.0.0.1:8840/api/v1/forms", { headers: auth })).status).toBe(500);
   });
 });
 

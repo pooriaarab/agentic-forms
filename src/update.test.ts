@@ -40,6 +40,30 @@ describe("ops.update", () => {
     await expect(ops.update("f", { ...spec([q("a")]), expectedVersion: 1 })).rejects.toThrow(/version 2/);
   });
 
+  test("two edits of one draft: the second, based on the old revision, is refused", async () => {
+    const ops = createOps(createMemoryStore());
+    const first = await ops.create({ id: "f", ...spec([q("a")]) });
+    await ops.update("f", { ...spec([q("a"), q("c")]), expectedRevision: first.revision });
+    await expect(ops.update("f", { ...spec([q("a", { label: "A!" })]), expectedRevision: first.revision })).rejects.toThrow(/changed since revision/);
+    expect(ids(await ops.get("f"))).toEqual(["a", "c"]);
+  });
+
+  test("an absent notice or retention is kept, and null removes it", async () => {
+    const ops = createOps(createMemoryStore());
+    await ops.create({ id: "f", ...spec([q("a")]), notice: "We keep it.", retentionDays: 30 });
+    expect(await ops.update("f", spec([q("a")]))).toMatchObject({ notice: "We keep it.", retentionDays: 30 });
+    expect(await ops.update("f", { ...spec([q("a")]), notice: "New.", retentionDays: null })).toMatchObject({ notice: "New." });
+    const cleared = await ops.update("f", { ...spec([q("a")]), notice: null });
+    expect(cleared.notice).toBeUndefined();
+    expect(cleared.retentionDays).toBeUndefined();
+  });
+
+  test("an empty rules object is not a change", async () => {
+    const ops = createOps(createMemoryStore());
+    await ops.create({ id: "f", ...spec([q("a")]) }, false, "human");
+    expect(marks(await ops.update("f", spec([q("a", { rules: {} })]), "agent"))).toEqual({ a: "human" });
+  });
+
   test("a condition that points forward is refused and nothing is stored", async () => {
     const ops = createOps(createMemoryStore());
     await ops.create({ id: "f", ...spec([q("a")]) });
@@ -66,6 +90,17 @@ describe("PUT /api/v1/forms/:id", () => {
     await human.request("/api/v1/forms/f/shares", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer x" }, body: JSON.stringify({ subject: "p", kind: "agent", role: "editor" }) });
     const agent = createApp({ store, auth: as("agent"), rateLimit: false });
     expect(marks((await (await put(agent, spec([q("a"), q("b", { label: "B" })]))).json()) as never)).toEqual({ a: "human", b: "agent" });
+  });
+
+  test("a viewer is refused with 403", async () => {
+    const store = createMemoryStore();
+    const owner = createApp({ store, auth: as("human", "ada"), rateLimit: false });
+    const json = { "content-type": "application/json", authorization: "Bearer x" };
+    await owner.request("/api/v1/forms", { method: "POST", headers: json, body: JSON.stringify({ id: "f", ...spec([q("a")]) }) });
+    await owner.request("/api/v1/forms/f/shares", { method: "POST", headers: json, body: JSON.stringify({ subject: "vi", kind: "human", role: "viewer" }) });
+    const viewer = createApp({ store, auth: as("human", "vi"), rateLimit: false });
+    expect((await put(viewer, spec([q("a", { label: "X" })]))).status).toBe(403);
+    expect(ids((await (await owner.request("/api/v1/forms/f", { headers: json })).json()) as never)).toEqual(["a"]);
   });
 
   test("a stale expectedVersion is 409, bad logic is 422, a bad spec is 400, a stranger is 404", async () => {

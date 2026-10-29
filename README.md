@@ -41,7 +41,7 @@ validateAnswers(form, { role: "dev" }).issues; // one "required" issue for "stac
 ```sh
 npx agentic-forms new poll --title "Poll"
 npx agentic-forms add-question poll --id color --type single_choice --label Color --choices red,blue --required
-npx agentic-forms update poll --spec edited.json            # edit, reorder, or remove questions
+npx agentic-forms update poll --spec edited.json            # edit, reorder, or remove questions (--by agent marks them)
 npx agentic-forms publish poll
 npx agentic-forms responses poll
 npx agentic-forms export poll > poll.csv

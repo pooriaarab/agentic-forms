@@ -26,7 +26,7 @@ const canon = (value: unknown): string =>
 export function markQuestions<S extends { questions: Question[] }>(before: Form | null, sections: S[], by?: MadeBy): S[] {
   const old = new Map<string, Question>();
   for (const section of before?.sections ?? []) for (const q of section.questions) old.set(q.id, q);
-  const rest = ({ madeBy: _drop, ...q }: Question): Omit<Question, "madeBy"> => q;
+  const rest = ({ madeBy: _drop, ...q }: Question): Omit<Question, "madeBy"> => (q.rules !== undefined && Object.keys(q.rules).length === 0 ? { ...q, rules: undefined } : q);
   return sections.map((section) => ({
     ...section,
     questions: section.questions.map((q) => {
@@ -73,15 +73,17 @@ export function createOps(store: Store) {
     },
     /**
      * Replaces the title, notice, retention, and sections: this edits, reorders, and removes questions.
-     * Editing a published form starts a new draft version. With `expectedVersion`, a head that moved is a VersionConflictError.
+     * Editing a published form starts a new draft version. `notice` and `retentionDays` stay as stored unless you send them (null removes one).
+     * With `expectedVersion` (a publish moved it) or `expectedRevision` (any save moved it), a head that moved is a VersionConflictError.
      */
     async update(formId: string, spec: unknown, by?: MadeBy): Promise<Form> {
-      const { expectedVersion, ...parsed } = formUpdateSchema.parse(spec);
+      const { expectedVersion, expectedRevision, notice, retentionDays, ...parsed } = formUpdateSchema.parse(spec);
       const form = await get(formId);
       const next = { ...form, ...parsed, sections: markQuestions(form, parsed.sections as Section[], by) } as Form;
-      if (parsed.notice === undefined) delete next.notice;
-      if (parsed.retentionDays === undefined) delete next.retentionDays;
-      return repo.save(next, { expectedVersion });
+      // Absent keeps the stored value. null removes it, so a privacy setting never goes by omission.
+      if (notice !== undefined) notice === null ? delete next.notice : (next.notice = notice);
+      if (retentionDays !== undefined) retentionDays === null ? delete next.retentionDays : (next.retentionDays = retentionDays);
+      return repo.save(next, { expectedVersion, expectedRevision });
     },
     async publish(formId: string): Promise<Form> {
       await get(formId);

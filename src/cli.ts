@@ -33,6 +33,7 @@ Commands:
   mcp                                                          Start the MCP server on stdio.
 
 Flags:
+  --by <human|agent>   Mark the questions this command makes or changes. Default: no mark.
   --data <file>   Data file. Default: $AGENTIC_FORMS_DATA or ./agentic-forms.json.
   --help, -h      Print this help.
   --version, -V   Print the version.`;
@@ -82,6 +83,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
       await startMcp(createFileStore(dataPath(flags)));
       return 0;
     }
+    const by = flags.by === undefined ? undefined : flags.by === "human" || flags.by === "agent" ? flags.by : (() => { throw new UsageError("--by is human or agent"); })();
     const ops = createOps(createFileStore(dataPath(flags)));
     const need = () => {
       if (id === undefined) throw new UsageError(`${command} needs a form id`);
@@ -94,7 +96,7 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
     };
     switch (command) {
       case "new":
-        out(JSON.stringify(await ops.create({ id: need(), title: str("title"), notice: flags.notice, retentionDays: num(flags, "retention-days"), sections: [{ id: "main", title: str("title"), questions: [] }] })));
+        out(JSON.stringify(await ops.create({ id: need(), title: str("title"), notice: flags.notice, retentionDays: num(flags, "retention-days"), sections: [{ id: "main", title: str("title"), questions: [] }] }, false, by)));
         return 0;
       case "add-question": {
         const choices = typeof flags.choices === "string" ? flags.choices.split(",") : undefined;
@@ -108,17 +110,17 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
           rules: Object.values(rules).some((v) => v !== undefined) ? rules : undefined,
           showIf: typeof flags["show-if"] === "string" ? showIf(flags["show-if"]) : undefined,
         };
-        out(JSON.stringify(await ops.addQuestion(need(), question, typeof flags.section === "string" ? flags.section : undefined)));
+        out(JSON.stringify(await ops.addQuestion(need(), question, typeof flags.section === "string" ? flags.section : undefined, by)));
         return 0;
       }
       case "from-prompt": {
         const spec = str("spec");
-        out(JSON.stringify(await ops.create(JSON.parse(readFileSync(spec === "-" ? 0 : spec, "utf8")), flags.publish === true)));
+        out(JSON.stringify(await ops.create(JSON.parse(readFileSync(spec === "-" ? 0 : spec, "utf8")), flags.publish === true, by)));
         return 0;
       }
       case "update": {
         const spec = str("spec");
-        out(JSON.stringify(await ops.update(need(), JSON.parse(readFileSync(spec === "-" ? 0 : spec, "utf8")))));
+        out(JSON.stringify(await ops.update(need(), JSON.parse(readFileSync(spec === "-" ? 0 : spec, "utf8")), by)));
         return 0;
       }
       case "publish":

@@ -30,7 +30,7 @@ describe("form repository failures", () => {
   test("a saved form reads back equal, and list returns every form past one page", async () => {
     const repo = createFormRepo(createMemoryStore());
     for (let i = 0; i < 120; i++) await repo.save(form(`f${String(i).padStart(3, "0")}`));
-    expect(await repo.get("f007")).toEqual(form("f007"));
+    expect(await repo.get("f007")).toEqual({ ...form("f007"), revision: 1 });
     expect(await repo.list()).toHaveLength(120);
   });
 });

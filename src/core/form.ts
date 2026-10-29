@@ -59,6 +59,8 @@ export type Form = {
   /** Days to keep each response. Unset keeps responses until you delete them. */
   retentionDays?: number;
   sections: Section[];
+  /** Counts every save of the head, a draft edit too. Unset on forms made before it existed. `expectedRevision` compares against it. */
+  revision?: number;
 };
 
 /** A file answer is a blob key. */

@@ -41,8 +41,7 @@ export const questionSchema = z
       .strict()
       .optional(),
     showIf: condition.optional(),
-    /** Read-only for callers: ops replaces it with the kind of the caller. */
-    madeBy: z.enum(["human", "agent"]).optional(),
+    madeBy: z.enum(["human", "agent"]).optional().describe("Set by the server from the caller. A value you send is ignored."),
   })
   .strict();
 
@@ -59,7 +58,15 @@ export const formSpecSchema = z
   .strict();
 
 /** The part of a form that an update replaces. The id comes from the path. */
-export const formUpdateSchema = formSpecSchema.omit({ id: true }).extend({ expectedVersion: z.number().int().min(1).optional() });
+export const formUpdateSchema = formSpecSchema.omit({ id: true }).extend({
+  // An absent notice or retention is kept as stored. Send null to remove it.
+  notice: z.string().nullable().optional(),
+  retentionDays: z.number().nullable().optional(),
+  /** Refuse the write unless the form is still at this version (a publish moves it). */
+  expectedVersion: z.number().int().min(1).optional(),
+  /** Refuse the write unless no save happened since you read `revision` (an edit of a draft moves it). */
+  expectedRevision: z.number().int().min(0).optional(),
+});
 
 export type FormSpec = z.infer<typeof formSpecSchema>;
 export type QuestionSpec = z.infer<typeof questionSchema>;

@@ -81,6 +81,10 @@ describe("cli flow", () => {
     const edit = { title: "Poll 2", sections: [{ id: "main", title: "Poll", questions: [{ id: "color", type: "single_choice", label: "Color", required: true, choices: ["red", "blue"] }, { id: "why", type: "long_text", label: "Why", required: true, showIf: { question: "color", op: "equals", value: "red" } }] }] };
     expect(json(cli(["update", "poll", "--spec", "-"], JSON.stringify(edit)).out)).toMatchObject({ title: "Poll 2" });
     expect(cli(["update", "poll"]).code).toBe(2);
+    expect(cli(["update", "poll", "--spec", "-", "--by", "robot"], JSON.stringify(edit)).code).toBe(2);
+    const marked = json(cli(["update", "poll", "--spec", "-", "--by", "agent"], JSON.stringify({ ...edit, title: "Poll 3", sections: [{ ...edit.sections[0], questions: [...edit.sections[0].questions, { id: "extra", type: "short_text", label: "Extra" }] }] })).out);
+    expect(marked.retentionDays).toBe(30); // an absent retention is kept
+    expect(marked.sections[0].questions.map((x: { madeBy?: string }) => x.madeBy)).toEqual([undefined, undefined, "agent"]);
     expect(cli(["submit", "poll", "--answers", '{"color":"red"}']).code).toBe(1); // draft is not open
     expect(json(cli(["publish", "poll"]).out).status).toBe("published");
     expect(cli(["submit", "poll", "--answers", '{"color":"red"}']).err).toContain("why");
@@ -88,7 +92,7 @@ describe("cli flow", () => {
     expect(cli(["submit", "poll", "--answers", '{"color":"red","why":"warm, \\"bold\\""}']).code).toBe(0);
     expect(json(cli(["responses", "poll", "--limit", "1"]).out)).toMatchObject({ items: [{ values: { color: "blue" } }] });
     const lines = cli(["export", "poll"]).out.split("\n");
-    expect(lines[0]).toBe("response_id,submitted_at,form_version,color,why");
+    expect(lines[0]).toBe("response_id,submitted_at,form_version,color,why,extra");
     expect(lines).toHaveLength(3);
     expect(lines[2]).toContain('"warm, ""bold"""');
   });

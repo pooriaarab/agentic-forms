@@ -9,6 +9,8 @@ export interface WorkerEnv {
   DB: D1Like;
   /** Where the database lives: "eu" or "us". It is a claim by the operator and has no default. */
   FORMS_REGION?: string;
+  /** Set to "1" only for local `wrangler dev`: local D1 reports no region, so it allows FORMS_REGION "unknown". Never set it in production. */
+  FORMS_UNSAFE_LOCAL_REGION?: string;
   /** Set it as a secret: wrangler secret put FORMS_RATE_SECRET. At least 32 bytes. It keys the hash of client addresses. */
   FORMS_RATE_SECRET?: string;
   /** Set it as a secret: wrangler secret put FORMS_API_TOKEN. */
@@ -21,7 +23,7 @@ let serving: Promise<ReturnType<typeof createApp>> | undefined;
 
 async function openStore(env: WorkerEnv) {
   const region = parseRegion(env.FORMS_REGION);
-  if (region === "unknown") throw new Error('FORMS_REGION must be "eu" or "us"');
+  if (region === "unknown" && !(env.FORMS_REGION === "unknown" && env.FORMS_UNSAFE_LOCAL_REGION === "1")) throw new Error('FORMS_REGION must be "eu" or "us"');
   await env.DB.prepare(D1_SCHEMA).run();
   const store = createD1Store(env.DB, { region });
   return { store, ops: createOps(store) };

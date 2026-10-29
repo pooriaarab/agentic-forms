@@ -17,7 +17,8 @@ const running: ChildProcess[] = [];
 // Starts `wrangler dev` and waits until it answers any request. A Worker that
 // refuses to start answers 500, so readiness is "any HTTP status".
 async function start(port: number, token?: string, options: { persist?: string; vars?: string[]; scheduled?: boolean } = {}): Promise<ChildProcess> {
-  const vars = [...(options.vars?.some((v) => v.startsWith("FORMS_RATE_SECRET:")) ? [] : ["--var", `FORMS_RATE_SECRET:${RATE_SECRET}`]), ...(token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`]), ...(options.vars ?? []).flatMap((v) => ["--var", v])];
+  const local = options.vars?.some((v) => v.startsWith("FORMS_REGION:")) ? [] : ["--var", "FORMS_REGION:unknown", "--var", "FORMS_UNSAFE_LOCAL_REGION:1"]; // local D1 reports no region
+  const vars = [...local, ...(options.vars?.some((v) => v.startsWith("FORMS_RATE_SECRET:")) ? [] : ["--var", `FORMS_RATE_SECRET:${RATE_SECRET}`]), ...(token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`]), ...(options.vars ?? []).flatMap((v) => ["--var", v])];
   const proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(port), ...(options.scheduled ? ["--test-scheduled"] : []), "--persist-to", options.persist ?? mkdtempSync(join(tmpdir(), "forms-d1-")), ...vars], {
     env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
   });

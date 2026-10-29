@@ -7,7 +7,7 @@
 
 Build forms and collect answers into tables.
 
-> Status: early development. It is not on npm yet. The library, CLI, MCP server, and Worker work.
+> Status: first release, version 0.1.0. The library, CLI, MCP server, and Worker work. The API can still change before 1.0.
 
 ## Install
 
@@ -82,9 +82,12 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 
 ## Limits
 
+- It needs `agentic-identity` 0.2.0 or newer (a dependency, installed with this package).
+
 - The Worker needs a D1 database. Create it in the EU: `wrangler d1 create agentic-forms --location weur`.
   Put its id in `wrangler.jsonc` and keep `FORMS_REGION` at `eu`. The region is your claim, and D1 refuses a query that another region served.
 - The CLI and MCP server keep data in one JSON file. It is safe for several processes, and it is not a database. Each read loads the whole file, so keep it to small data sets. A file in an older format fails with a clear error.
+- Local `wrangler dev` uses a D1 that reports no region, so the region check fails there. For local work only, set `FORMS_REGION=unknown` and `FORMS_UNSAFE_LOCAL_REGION=1`. Never set them in production.
 - Import `createMemoryStore` and the `Store` types from `agentic-identity`. This package does not re-export them.
 - The fill page needs JavaScript and does not show file questions.
 - The Worker deletes expired responses every 10 minutes (a Cron Trigger). The CLI does not schedule: run `purge-all` yourself. Each run reads a bounded number of pages per pass, so a big backlog clears over several runs. A run can need more D1 calls than the Workers Free plan allows. The ordered read has no index: a very large `responses` collection makes each page read slow.

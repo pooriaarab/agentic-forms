@@ -5,11 +5,11 @@ Build forms and collect answers into tables.
 Keywords: forms,surveys,responses,agents,mcp,cli,tables,collaboration.
 
 - SDK: import { createOps, createFileStore } from "agentic-forms".
-- Web UI: the Worker serves /ui/ (build it with npm run build:ui). It signs in with an API token, builds forms, previews, publishes, and reads responses. The UI calls the HTTP API. Listing forms exists only in the HTTP API and agentic-forms/client; every other action also exists in the SDK, CLI, MCP, or HTTP API.
+- Web UI: the Worker serves /ui/ (build it with npm run build:ui). It signs in with an API token, builds forms, previews, publishes, and reads responses. The UI calls the HTTP API. Every action also exists in the SDK, CLI, MCP, or HTTP API.
 - UI component: mount(element, { baseUrl, getToken }) from "agentic-forms/ui", with "agentic-forms/ui.css" and "agentic-design/styles.css". It returns { update, unmount }. getToken is called before each request. React 19 is a peer dependency. The pages use the address hash #/forms/<id>.
 - Remote SDK: import { createClient, ApiError } from "agentic-forms/client"; createClient({ baseUrl, token, fetch? }) has one method per /api/v1 route plus the public submit. A refused call throws ApiError with status and code. Methods take { signal } last. No retries. It runs in browsers, Workers, and Node 22.
 - CLI: agentic-forms --help.
-- MCP: run agentic-forms mcp, then call new_form.
+- MCP: run agentic-forms mcp, then call new_form. list_forms lists every form in the store.
 
 ## Docs
 

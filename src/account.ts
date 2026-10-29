@@ -1,7 +1,7 @@
 // The package's side of the account contract: a host calls `exportAccount` and `eraseAccount`
 // and never reads the storage layout. The shape is provisional: it is the contract that a later
 // `agentic-identity` release adds to `agentic-identity/account` as `AccountPackage`. The `AccountApp` of earlier releases is a different contract, and this does not fit it.
-import { MAX_OWNERS_ON_ERASE, SUBJECT_KINDS, createSharing, type PrincipalContext, type Store, type Subject } from "agentic-identity";
+import { MAX_FOLDER_DEPTH, MAX_OWNERS_ON_ERASE, SUBJECT_KINDS, createSharing, type Doc, type PrincipalContext, type Store, type Subject } from "agentic-identity";
 import { createOps } from "./ops.js";
 
 export interface FormsAccountDeps {
@@ -31,8 +31,8 @@ export interface FormsAccount {
   /**
    * Erases each form that the subject is the only owner of, with its snapshots, answers, grants, and audit entries. A form with
    * another owner stays: only the subject's grant goes, as do the grants the subject holds on forms of others. Last, the audit
-   * entries rooted in the subject go. Counts by the collection names. The `audit` count can miss an entry written while the erase runs. Run it with writes stopped. A repeat finds nothing and counts zero.
-   * A failure names the form id. A stop before the resource row goes is finished by a repeat, and the counts of the runs add up. A stop after it leaves nothing to find, and the counts of forms, grants, and audit entries for that form may be missing from the error message. Entries on a resource that is already gone are not matched and stay.
+   * entries rooted in the subject go. A form under a folder that another person owns stays, as it has another owner. Counts by the collection names. The `audit` count can miss an entry written while the erase runs. Run it with writes stopped. A repeat finds nothing and counts zero.
+   * A failure names the form id. A stop before the resource row goes is finished by a repeat. The counts of a run that stopped can be low, because a stop inside the resource erase may follow deletes that the run did not count. A stop after it leaves nothing to find, and the counts of forms, grants, and audit entries for that form may be missing from the error message. Entries on a resource that is already gone are not matched and stay.
    * A grant with no valid kind stops both calls: run `migrateGrants` first. An audit entry with no known root kind, or on a resource that is not a form, is left alone. Invites and links record only the id of their maker, with no kind, so they are not matched to a subject: they leave with their form.
    */
   eraseAccount(subject: Subject, deps: FormsAccountDeps): Promise<Record<FormsCollection, number>>;
@@ -49,11 +49,23 @@ function check(subject: Subject, deps: FormsAccountDeps): Store {
   return deps.store;
 }
 
-/** True when no owner of the form is someone else. An owner with no valid kind cannot be told from the subject: it stops the erase rather than guess. */
+/**
+ * True when no owner of the form is someone else. Sharing gives a form the roles of every folder above it, so those owners count too.
+ * An owner with no valid kind, or a folder chain that cannot be read (a loop, a missing parent, or more than MAX_FOLDER_DEPTH steps),
+ * stops the erase rather than guess.
+ */
 async function noOtherOwner(store: Store, formId: string, subject: Subject): Promise<boolean> {
-  const owners = (await store.query("grants", { where: { resourceId: formId, role: "owner" }, limit: MAX_OWNERS_ON_ERASE + 1 })).items;
-  if (owners.some((o) => !(SUBJECT_KINDS as readonly unknown[]).includes(o.data.subjectKind))) throw new Error("an owner grant has no valid kind");
-  return owners.every((o) => o.data.subjectKind === subject.kind && o.data.subjectId === subject.id);
+  let id: string | undefined = formId;
+  for (let depth = 0; id !== undefined; depth++) {
+    if (depth >= MAX_FOLDER_DEPTH) throw new Error("the folder path is too deep to read");
+    const resource: Doc | null = await store.get("resources", id);
+    if (resource === null) throw new Error("a folder above the form is missing");
+    const owners = (await store.query("grants", { where: { resourceId: id, role: "owner" }, limit: MAX_OWNERS_ON_ERASE + 1 })).items;
+    if (owners.some((o) => !(SUBJECT_KINDS as readonly unknown[]).includes(o.data.subjectKind))) throw new Error("an owner grant has no valid kind");
+    if (owners.some((o) => o.data.subjectKind !== subject.kind || o.data.subjectId !== subject.id)) return false;
+    id = typeof resource.parentId === "string" && resource.parentId !== "" ? resource.parentId : undefined;
+  }
+  return true;
 }
 
 async function* docs(store: Store, collection: string, where: Record<string, string>) {

@@ -255,4 +255,23 @@ describe("eraseAccount", () => {
     expect(await store.get("forms", "ana-form")).not.toBeNull();
     expect((await all(store, "responses")).length).toBe(1);
   });
+
+  it("keeps a form that another person owns through a folder above it", async () => {
+    const store = createMemoryStore();
+    await store.put("resources", "team", { id: "team", type: "folder" });
+    await store.put("grants", "team:human:bob", { resourceId: "team", subjectKind: "human", subjectId: "bob", role: "owner" });
+    await make(store, "ana-form", ctx("ana"));
+    await store.put("resources", "ana-form", { id: "ana-form", type: "form", parentId: "team" });
+    expect(await formsAccount.eraseAccount(ANA, { store })).toMatchObject({ forms: 0, responses: 0, grants: 1 });
+    expect(await store.get("forms", "ana-form")).not.toBeNull();
+    expect(await store.get("grants", "ana-form:human:ana")).toBeNull();
+  });
+
+  it("stops when the folder above the form is missing", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    await store.put("resources", "ana-form", { id: "ana-form", type: "form", parentId: "ghost" });
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form ana-form/);
+    expect(await store.get("forms", "ana-form")).not.toBeNull();
+  });
 });

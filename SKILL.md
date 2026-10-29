@@ -28,7 +28,7 @@ agentic-forms responses poll
 
 ## Use the MCP server
 
-Start it with `agentic-forms mcp`. See AGENTS.md for the tools.
+Start it with `agentic-forms mcp`. The tools are `new_form`, `add_question`, `publish_form`, `get_form`, `submit_response`, `list_responses`, `export_csv`, `purge_expired`, and `purge_all`.
 
 ## Rules
 

@@ -1,6 +1,6 @@
 {
   "name": "agentic-forms",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Build forms and collect answers into tables.",
   "keywords": [
     "forms",
@@ -21,10 +21,14 @@
   "type": "module",
   "private": false,
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "llms.txt",
+    "SKILL.md"
   ],
   "publishConfig": {
     "access": "public"
@@ -47,11 +51,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build",
     "ci:local": "npm run build && npm run typecheck && npm test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "agentic-identity": "^0.1.0",
+    "agentic-identity": "^0.2.0",
     "hono": "^4.13.14",
     "re2js": "^2.9.1",
     "zod": "^3.25.0"

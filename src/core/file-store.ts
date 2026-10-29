@@ -5,6 +5,7 @@ import {
   assertId,
   createMemoryStore,
   parseRegion,
+  StoreConflictError,
   type AdapterOptions,
   type Doc,
   type Page,
@@ -241,7 +242,7 @@ export function createFileStore(path: string, options: FileStoreOptions = {}): S
       );
       if (unchanged) return result;
     }
-    throw new Error(`transaction kept conflicting after ${MAX_TRANSACTION_ATTEMPTS} attempts`);
+    throw new StoreConflictError(`transaction kept conflicting after ${MAX_TRANSACTION_ATTEMPTS} attempts`);
   }
 
   return {

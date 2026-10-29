@@ -2,6 +2,12 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.9.1 - 2026-10-29
+
+### Changed
+
+- Move to `agentic-identity` 0.9.x. The package depends on this range now. The code needed no change.
+
 ## 0.9.0 - 2026-10-29
 
 ### Changed

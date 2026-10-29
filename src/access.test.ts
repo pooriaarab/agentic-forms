@@ -1,8 +1,10 @@
 // Ways form access can fail, written before the code. They drive the real HTTP
 // handler with the real memory adapters of agentic-identity.
-import { createMemoryAuth, createMemoryStore, type PrincipalContext } from "agentic-identity";
+import { createMemoryAuth, createMemoryStore, createSharing, type PrincipalContext } from "agentic-identity";
 import { beforeEach, describe, expect, test } from "vitest";
 import { createApp } from "./app.js";
+import { createFormRepo } from "./core/repo.js";
+import { createTokenAuth } from "./core/token-auth.js";
 
 const SECRET = "r".repeat(32);
 const human = (id: string, scopes = ["*:admin"]): PrincipalContext => ({ principalId: id, kind: "human", chain: [{ id, kind: "human" }], scopes });
@@ -128,6 +130,63 @@ describe("owner and roles", () => {
     const names = async (token: string) => ((await (await call(token, "GET", "")).json()) as { forms: { id: string }[] }).forms.map((f) => f.id).sort();
     expect(await names(olga)).toEqual(["a", "b"]);
     expect(await names(sam)).toEqual(["b", "c"]);
+  });
+});
+
+describe("rows from other apps or bad data", () => {
+  test("rights on a resource of another type with the same id give nothing on the form", async () => {
+    // A form from before roles has no resource row. Bob owns a "doc" with the same id.
+    const repo = createFormRepo(store);
+    await repo.save({ ...spec("x"), version: 1, status: "draft" } as never);
+    await repo.publish("x");
+    const bob = human("bob", ["doc:admin"]);
+    await createSharing(store).createResource(bob, { id: "x", type: "doc" });
+    const token = await issue(bob);
+    for (const [method, path] of [["GET", "/x"], ["POST", "/x/purge"], ["GET", "/x/responses"], ["GET", "/x/export"], ["POST", "/x/shares"], ["GET", "/x/audit"]]) {
+      expect((await call(token, method, path, method === "POST" ? { subject: "bob", role: "owner" } : undefined)).status, `${method} ${path}`).toBe(404);
+    }
+  });
+
+  test("the list leaves out a grant with no form resource or a role that is not valid", async () => {
+    const olga = await issue(human("olga"));
+    await call(olga, "POST", "", spec("a"));
+    await call(olga, "POST", "", spec("b"));
+    await store.put("grants", "b:olga", { resourceId: "b", subjectId: "olga", role: "king" });
+    await store.put("grants", "ghost:olga", { resourceId: "ghost", subjectId: "olga", role: "owner" });
+    await createSharing(store).createResource(human("olga", ["doc:write"]), { id: "d", type: "doc" });
+    const ids = ((await (await call(olga, "GET", "")).json()) as { forms: { id: string }[] }).forms.map((f) => f.id);
+    expect(ids).toEqual(["a"]);
+  });
+});
+
+describe("keeping an owner", () => {
+  test("an owner cannot demote the last owner, but can once there is another", async () => {
+    const olga = await issue(human("olga"));
+    await call(olga, "POST", "", spec("a"));
+    expect((await call(olga, "POST", "/a/shares", { subject: "olga", role: "viewer" })).status).toBe(409);
+    expect((await call(olga, "GET", "/a/audit")).status).toBe(200);
+    expect((await call(olga, "POST", "/a/shares", { subject: "sam", role: "owner" })).status).toBe(200);
+    expect((await call(olga, "POST", "/a/shares", { subject: "olga", role: "viewer" })).status).toBe(200);
+  });
+
+  test("a form id taken by an owner row with no form can be made by that owner, and only by that owner", async () => {
+    const [olga, sam] = [await issue(human("olga")), await issue(human("sam"))];
+    await createSharing(store).createResource(human("olga"), { id: "z", type: "form" });
+    expect((await call(sam, "POST", "", spec("z"))).status).toBe(409);
+    expect((await call(olga, "POST", "", spec("z"))).status).toBe(201);
+    expect((await call(olga, "GET", "/z")).status).toBe(200);
+  });
+
+  test("only owner, editor, and viewer can be shared", async () => {
+    const olga = await issue(human("olga"));
+    await call(olga, "POST", "", spec("a"));
+    expect((await call(olga, "POST", "/a/shares", { subject: "sam", role: "commenter" })).status).toBe(400);
+  });
+
+  test("a caller with an empty chain is 401, and a token over 512 bytes cannot be set", async () => {
+    const odd = await issue({ principalId: "x", kind: "human", chain: [], scopes: ["*:admin"] });
+    expect((await call(odd, "POST", "", spec("a"))).status).toBe(401);
+    expect(() => createTokenAuth("t".repeat(513))).toThrow("API token");
   });
 });
 

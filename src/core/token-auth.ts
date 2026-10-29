@@ -1,6 +1,8 @@
 import type { Auth } from "agentic-identity";
 
 const MIN_TOKEN_BYTES = 32;
+/** A longer token would not fit the header pattern below, and every call would fail without a hint. */
+const MAX_TOKEN_BYTES = 512;
 
 /** Compares two secrets in constant time by comparing their digests. */
 async function sameSecret(a: string, b: string): Promise<boolean> {
@@ -16,8 +18,9 @@ async function sameSecret(a: string, b: string): Promise<boolean> {
  * shorter than 32 bytes. There is no default.
  */
 export function createTokenAuth(token: string): Auth {
-  if (typeof token !== "string" || new TextEncoder().encode(token).length < MIN_TOKEN_BYTES) {
-    throw new Error(`the API token must be a string of at least ${MIN_TOKEN_BYTES} bytes`);
+  const bytes = typeof token === "string" ? new TextEncoder().encode(token).length : 0;
+  if (bytes < MIN_TOKEN_BYTES || bytes > MAX_TOKEN_BYTES) {
+    throw new Error(`the API token must be a string of ${MIN_TOKEN_BYTES} to ${MAX_TOKEN_BYTES} bytes`);
   }
   return {
     async authenticate(request) {

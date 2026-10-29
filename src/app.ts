@@ -10,6 +10,7 @@ import { renderFillPage } from "./page.js";
 import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
+const SHARE_ROLES: readonly Role[] = ["owner", "editor", "viewer"];
 
 /** The caller may not do this. A caller with no role on the form gets 404, so a form id never leaks. */
 class AccessError extends Error {
@@ -89,13 +90,16 @@ export function createApp(options: AppOptions = {}) {
   app.use("/api/v1/*", async (c, next) => {
     if (!options.auth) return c.json({ error: "api_disabled" }, 503);
     const ctx = await options.auth.authenticate(c.req.raw);
-    if (!ctx) return c.json({ error: "unauthorized" }, 401);
+    if (!ctx || ctx.chain.length === 0) return c.json({ error: "unauthorized" }, 401);
     c.set("ctx", ctx);
     await next();
   });
   /** Decides and audits. Throws AccessError unless the caller's role and scopes allow `action` on the form. */
   const require = async (c: { get(key: "ctx"): PrincipalContext }, action: Action, formId: string) => {
     const ctx = c.get("ctx");
+    // The resource namespace is shared. A resource of another type with this id is not a form.
+    const resource = await store.get("resources", formId);
+    if (resource !== null && resource.type !== "form") throw new AccessError(404);
     const decision = await sharing.can(ctx, action, formId);
     // A missing scope is the caller's own limit and says nothing about the form, so it is 403.
     if (!decision.allowed) throw new AccessError(decision.role === undefined && hasScope(ctx.scopes, `form:${action}`) ? 404 : 403);
@@ -111,8 +115,11 @@ export function createApp(options: AppOptions = {}) {
     try {
       await sharing.createResource(ctx, { id: parsed.id, type: "form" });
     } catch (error) {
-      if (error instanceof Error && error.message === "resource exists") throw new OpsError("conflict", `form "${parsed.id}" already exists`);
-      throw error;
+      if (!(error instanceof Error) || error.message !== "resource exists") throw error;
+      // An owner row with no form is what a failed create leaves. Its owner may finish the job.
+      const resource = await store.get("resources", parsed.id);
+      const adopt = resource?.type === "form" && (await sharing.can(ctx, "admin", parsed.id)).allowed && !(await repo.get(parsed.id));
+      if (!adopt) throw new OpsError("conflict", `form "${parsed.id}" already exists`);
     }
     return c.json(await ops.create(parsed, publish === true), 201);
   });
@@ -127,7 +134,9 @@ export function createApp(options: AppOptions = {}) {
     do {
       const page = await store.query("grants", { where: { subjectId: root }, orderBy: { field: "resourceId" }, cursor });
       for (const { data } of page.items) {
-        const form = typeof data.resourceId === "string" ? await repo.get(data.resourceId) : null;
+        if (typeof data.resourceId !== "string" || !ROLES.includes(data.role as Role)) continue;
+        if ((await store.get("resources", data.resourceId))?.type !== "form") continue;
+        const form = await repo.get(data.resourceId);
         if (form) visible.push(form);
       }
       cursor = page.nextCursor;
@@ -164,8 +173,13 @@ export function createApp(options: AppOptions = {}) {
   app.post(`${forms}/:id/shares`, async (c) => {
     await require(c, "admin", c.req.param("id"));
     const { subject, role } = await c.req.json();
-    if (typeof subject !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(subject) || !ROLES.includes(role as Role)) {
-      return c.json({ error: "invalid_share", message: `give a subject of letters, digits, "-" and "_", and a role of ${ROLES.join(", ")}` }, 400);
+    if (typeof subject !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(subject) || !SHARE_ROLES.includes(role as Role)) {
+      return c.json({ error: "invalid_share", message: `give a subject of letters, digits, "-" and "_", and a role of ${SHARE_ROLES.join(", ")}` }, 400);
+    }
+    // identity's grant() does not guard the last owner, so check here. Two owners demoted at the same moment can still pass.
+    if (role !== "owner") {
+      const owners = (await store.query("grants", { where: { resourceId: c.req.param("id"), role: "owner" }, limit: 2 })).items;
+      if (owners.length === 1 && owners[0]!.data.subjectId === subject) throw new OpsError("conflict", "the last owner cannot be removed");
     }
     await sharing.grant(c.get("ctx"), c.req.param("id"), subject, role as Role);
     return c.json({ ok: true });

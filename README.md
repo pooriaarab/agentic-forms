@@ -15,7 +15,7 @@ Build forms and collect answers into tables.
 npm install agentic-forms
 ```
 
-It needs Node 22 or newer. It depends on `agentic-identity` 0.6.x and `agentic-design` 0.2.x.
+It needs Node 22 or newer. It depends on `agentic-identity` 0.7.x and `agentic-design` 0.3.x.
 
 ## Quick start
 
@@ -198,7 +198,7 @@ the token. The share link of a form points at `baseUrl`. The pages follow the ad
 ## Features
 
 - Ten question types: short text, long text, number, email, single choice,
-  multi choice, dropdown, date, rating, and file reference.
+  multi choice, dropdown, date, rating, and file.
 - Required flags, length, pattern, and range rules.
 - Sections and conditions: show a question or a section when an earlier answer matches.
 - Form checks: a logic cycle, logic that reads a later or deleted question,

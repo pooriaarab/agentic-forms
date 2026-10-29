@@ -1,6 +1,6 @@
 {
   "name": "agentic-forms",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Build forms and collect answers into tables.",
   "keywords": [
     "forms",
@@ -27,6 +27,7 @@
     "dist",
     "README.md",
     "LICENSE",
+    "CHANGELOG.md",
     "llms.txt",
     "SKILL.md"
   ],

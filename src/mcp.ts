@@ -10,7 +10,7 @@ import { ApiError, createClient } from "./client.js";
 import { OpsError, createOps } from "./ops.js";
 import { VERSION } from "./version.js";
 
-const answersSchema = z.record(z.union([z.string(), z.number(), z.array(z.string())]));
+const answersSchema = z.record(z.string(), z.union([z.string(), z.number(), z.array(z.string())]));
 
 function describe(error: unknown): string | undefined {
   if (error instanceof ZodError) return error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ");

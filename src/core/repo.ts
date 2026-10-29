@@ -68,8 +68,9 @@ export function createFormRepo(store: Store) {
           throw new VersionConflictError(form.id, expectedVersion, head?.version ?? null);
         }
         const { expectedRevision } = options;
-        if (expectedRevision !== undefined && (head?.revision ?? 0) !== expectedRevision) {
-          throw new VersionConflictError(form.id, expectedRevision, head?.revision ?? 0, `form "${form.id}" changed since revision ${expectedRevision}: read it again`, "revision");
+        // A caller that read the form has an erased head to fear too: it would come back from the dead.
+        if (expectedRevision !== undefined && (head === null || (head.revision ?? 0) !== expectedRevision)) {
+          throw new VersionConflictError(form.id, expectedRevision, head === null ? null : (head.revision ?? 0), `form "${form.id}" ${head === null ? "was erased" : `changed since revision ${expectedRevision}`}: read it again`, "revision");
         }
         const version = head ? (head.status === "published" ? head.version + 1 : head.version) : 1;
         const draft: Form = { ...form, version, status: "draft", revision: (head?.revision ?? 0) + 1 };

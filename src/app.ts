@@ -280,7 +280,7 @@ export function createApp(options: AppOptions = {}) {
   app.onError((error, c) => {
     if (error instanceof AccessError) return c.json({ error: error.status === 404 ? "not_found" : "forbidden" }, error.status);
     if (error instanceof OpsError) return c.json({ error: error.kind, message: error.message }, error.kind === "not_found" ? 404 : 409);
-    if (error instanceof VersionConflictError) return c.json({ error: "version_conflict", message: error.message }, 409);
+    if (error instanceof VersionConflictError) return c.json({ error: "version_conflict", counts: error.counts, message: error.message }, 409);
     if (error instanceof EraseRefusedError) return c.json({ error: "conflict", message: error.message }, 409);
     if (error instanceof BackfillError) return c.json({ error: error.kind, message: error.message }, 400);
     if (error instanceof FormError || error instanceof SubmitError) return c.json({ error: "invalid", issues: error.issues }, 422);

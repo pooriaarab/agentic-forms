@@ -33,7 +33,7 @@ Commands:
   mcp                                                          Start the MCP server on stdio.
 
 Flags:
-  --by <human|agent>   Mark the questions this command makes or changes. Default: no mark.
+  --by <human|agent>   Mark the questions this command makes or changes. Default: no mark. A local file has no signed-in caller, so this is your own claim.
   --data <file>   Data file. Default: $AGENTIC_FORMS_DATA or ./agentic-forms.json.
   --help, -h      Print this help.
   --version, -V   Print the version.`;

@@ -69,7 +69,8 @@ export function createOps(store: Store) {
       const section = sectionId === undefined ? form.sections[0] : form.sections.find((s) => s.id === sectionId);
       if (!section) throw new OpsError("not_found", `section "${sectionId}" not found`);
       const sections = form.sections.map((s) => (s === section ? { ...s, questions: [...s.questions, questionSchema.parse(question) as Question] } : s));
-      return repo.save({ ...form, sections: markQuestions(form, sections, by) });
+      // The save is a compare-and-set against the form just read, so the marks match what is stored.
+      return repo.save({ ...form, sections: markQuestions(form, sections, by) }, { expectedRevision: form.revision ?? 0 });
     },
     /**
      * Replaces the title, notice, retention, and sections: this edits, reorders, and removes questions.
@@ -83,7 +84,8 @@ export function createOps(store: Store) {
       // Absent keeps the stored value. null removes it, so a privacy setting never goes by omission.
       if (notice !== undefined) notice === null ? delete next.notice : (next.notice = notice);
       if (retentionDays !== undefined) retentionDays === null ? delete next.retentionDays : (next.retentionDays = retentionDays);
-      return repo.save(next, { expectedVersion, expectedRevision });
+      // Without an expectedRevision the save still checks the form it read, so a notice kept by omission is the one stored.
+      return repo.save(next, { expectedVersion, expectedRevision: expectedRevision ?? form.revision ?? 0 });
     },
     async publish(formId: string): Promise<Form> {
       await get(formId);

@@ -40,6 +40,13 @@ describe("ops.update", () => {
     await expect(ops.update("f", { ...spec([q("a")]), expectedVersion: 1 })).rejects.toThrow(/version 2/);
   });
 
+  test("a question moved to another section keeps its mark", async () => {
+    const ops = createOps(createMemoryStore());
+    await ops.create({ id: "f", title: "T", sections: [{ id: "s", title: "S", questions: [q("a")] }, { id: "t", title: "T2", questions: [] }] }, false, "human");
+    const moved = await ops.update("f", { title: "T", sections: [{ id: "s", title: "S", questions: [] }, { id: "t", title: "T2", questions: [q("a")] }] }, "agent");
+    expect(moved.sections[1]!.questions[0]).toMatchObject({ id: "a", madeBy: "human" });
+  });
+
   test("two edits of one draft: the second, based on the old revision, is refused", async () => {
     const ops = createOps(createMemoryStore());
     const first = await ops.create({ id: "f", ...spec([q("a")]) });
@@ -62,6 +69,34 @@ describe("ops.update", () => {
     const ops = createOps(createMemoryStore());
     await ops.create({ id: "f", ...spec([q("a")]) }, false, "human");
     expect(marks(await ops.update("f", spec([q("a", { rules: {} })]), "agent"))).toEqual({ a: "human" });
+  });
+
+  test("an update that races an erase does not bring the form back", async () => {
+    const store = createMemoryStore();
+    const ops = createOps(store);
+    await ops.create({ id: "f", ...spec([q("a")]) });
+    const real = store.transaction.bind(store);
+    // Run the erase after update has read the form and before it saves.
+    let erased = false;
+    store.transaction = (async (fn: never) => {
+      if (!erased) {
+        erased = true;
+        await ops.erase("f");
+      }
+      return real(fn);
+    }) as typeof store.transaction;
+    await expect(ops.update("f", spec([q("a", { label: "A!" })]))).rejects.toThrow(/was erased/);
+    expect(await ops.repo.get("f")).toBeNull();
+  });
+
+  test("two updates at once cannot drop a notice by omission", async () => {
+    const ops = createOps(createMemoryStore());
+    await ops.create({ id: "f", ...spec([q("a")]) });
+    const results = await Promise.allSettled([ops.update("f", { ...spec([q("a")]), notice: "Consent needed" }), ops.update("f", { ...spec([q("a")]), title: "T2" })]);
+    const stored = await ops.get("f");
+    // Either the second one lost the race and was refused, or it ran after the first and kept the notice.
+    expect(results.filter((r) => r.status === "fulfilled").length).toBeGreaterThanOrEqual(1);
+    if (results.every((r) => r.status === "fulfilled")) expect(stored.notice).toBe("Consent needed");
   });
 
   test("a condition that points forward is refused and nothing is stored", async () => {
@@ -92,13 +127,6 @@ describe("PUT /api/v1/forms/:id", () => {
     expect(marks((await (await put(agent, spec([q("a"), q("b", { label: "B" })]))).json()) as never)).toEqual({ a: "human", b: "agent" });
   });
 
-  test("a question moved to another section keeps its mark", async () => {
-    const ops = createOps(createMemoryStore());
-    await ops.create({ id: "f", title: "T", sections: [{ id: "s", title: "S", questions: [q("a")] }, { id: "t", title: "T2", questions: [] }] }, false, "human");
-    const moved = await ops.update("f", { title: "T", sections: [{ id: "s", title: "S", questions: [] }, { id: "t", title: "T2", questions: [q("a")] }] }, "agent");
-    expect(moved.sections[1]!.questions[0]).toMatchObject({ id: "a", madeBy: "human" });
-  });
-
   test("a viewer is refused with 403", async () => {
     const store = createMemoryStore();
     const owner = createApp({ store, auth: as("human", "ada"), rateLimit: false });
@@ -119,7 +147,7 @@ describe("PUT /api/v1/forms/:id", () => {
     expect(await stale.json()).toMatchObject({ error: "version_conflict" });
     const behind = await put(owner, { ...spec([q("a")]), expectedRevision: 0 });
     expect(behind.status).toBe(409);
-    expect(await behind.json()).toMatchObject({ error: "version_conflict", message: expect.stringContaining("revision 0") });
+    expect(await behind.json()).toMatchObject({ error: "version_conflict", counts: "revision", message: expect.stringContaining("revision 0") });
     expect((await put(owner, spec([q("a", { showIf: { question: "zz", op: "answered" } })]))).status).toBe(422);
     expect((await put(owner, { title: "" })).status).toBe(400);
     const stranger = createApp({ store, auth: as("human", "eve"), rateLimit: false });

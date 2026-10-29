@@ -2,6 +2,12 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.11.0 - 2026-10-29
+
+### Added
+
+- `agentic-forms/account` exports `formsAccount`, the package's side of account export and erase. `exportAccount(subject, { store })` returns plain JSON for forms, snapshots, answers, grants, and audit entries. `eraseAccount(subject, { store })` erases the forms the subject alone owns, and the subject's grants and audit entries, and returns counts. A repeat counts zero. The shape is provisional: a later `agentic-identity` release names it `AccountPackage`.
+
 ## 0.10.0 - 2026-10-29
 
 ### Added

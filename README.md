@@ -176,6 +176,23 @@ A stdio server writes only MCP messages to stdout, so do not log there.
 
 `createMcpServer(store, remote?)` returns an `McpServer`. Connect it to any transport of `@modelcontextprotocol/sdk`. Without `store`, it uses a memory store that is lost when the process exits. Pass `remote` as `{ url, token }` to add the three sharing tools, as the CLI does with `AGENTIC_FORMS_URL` and `AGENTIC_FORMS_TOKEN`. The MCP tools read and write the store as it is. They do not check a caller's role, so give an agent only the store it may change.
 
+## Account export and erase
+
+A host that runs account export and erase calls `formsAccount` from `agentic-forms/account`, so it never reads the storage layout. The subject is `{ id, kind }`, with `kind` set to `human` or `agent`: a person and an agent with one id are two subjects.
+
+```ts
+import { formsAccount } from "agentic-forms/account";
+
+const data = await formsAccount.exportAccount({ id: "ana", kind: "human" }, { store });
+const counts = await formsAccount.eraseAccount({ id: "ana", kind: "human" }, { store });
+```
+
+- The export has plain JSON in `forms`, `form_versions`, `responses` (the forms the subject owns, with their answers), `grants` (every role the subject holds on a form), and `audit` (the entries rooted in the subject).
+- The erase removes each form that the subject alone owns, with its snapshots, answers, and grants. A form with another owner stays, and only the subject's grant goes. The grants of the subject on other forms go too. Last, the audit entries rooted in the subject go. It returns counts by the same names.
+- A repeat of the erase counts zero. If it stops, the error names the form id, and a repeat goes on from there.
+- Answers hold no respondent id, so they are exported only with their form. Invites and links keep the id of their maker with no kind, so they leave only with their form.
+- The shape is provisional: a later `agentic-identity` release names it `AccountPackage`. Stop writes before you run the erase.
+
 ## UI
 
 The Worker serves a small web UI at `/ui/`. It uses the [`agentic-design`](https://www.npmjs.com/package/agentic-design) package for tokens, controls, dialogs, and the app shell. It calls the API through `agentic-forms/client`.

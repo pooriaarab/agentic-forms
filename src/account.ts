@@ -145,6 +145,8 @@ export const formsAccount: FormsAccount = {
           // Sharing finds an owner only under the standard key. Without it the data erase would pass and the resource erase would be refused.
           if (!mine.some((g) => g.id === `${formId}:${subject.kind}:${subject.id}` && g.role === "owner")) throw new Error("the owner grant has a key that sharing does not honor");
           if ((await store.query("resources", { where: { parentId: formId }, limit: 1 })).items.length > 0) throw new Error("the form has child resources");
+          // The resource erase asks sharing for admin. Ask first, so a refusal comes before any data goes.
+          if (!(await sharing.can(ctx, "admin", formId)).allowed) throw new Error("sharing does not give the subject admin on the form");
           const grants = (await collect(store, "grants", { resourceId: formId })).length;
           const trail = (await collect(store, "audit", { resourceId: formId })).length;
           const snapshots = (await collect(store, "form_versions", { id: formId })).length;

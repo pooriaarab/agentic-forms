@@ -244,4 +244,15 @@ describe("eraseAccount", () => {
     expect(await store.get("forms", "odd-form")).not.toBeNull();
     expect(await store.get("forms", "ana-form")).toBeNull();
   });
+
+  it("stops before any data goes when sharing would refuse the resource erase", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    // A path deeper than sharing reads is not resolved, so no admin is given.
+    for (let i = 0; i < 17; i++) await store.put("resources", `d${i}`, { id: `d${i}`, type: "folder", ...(i === 0 ? {} : { parentId: `d${i - 1}` }) });
+    await store.put("resources", "ana-form", { id: "ana-form", type: "form", parentId: "d16" });
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form ana-form/);
+    expect(await store.get("forms", "ana-form")).not.toBeNull();
+    expect((await all(store, "responses")).length).toBe(1);
+  });
 });

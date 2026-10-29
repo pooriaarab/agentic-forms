@@ -2,10 +2,15 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
-## Unreleased
+## 0.5.0 - 2026-10-29
+
+No breaking changes. `agentic-design` moves from a dev dependency to a runtime dependency.
 
 - Add `agentic-forms/ui`. `mount(element, { baseUrl, getToken })` renders the forms pages into an element and returns `update` and `unmount`. `agentic-forms/ui.css` holds its styles. `react` and `react-dom` 19 are optional peer dependencies, and `agentic-design` is now a dependency.
 - `createClient` takes a function for `token`. It is called before each request.
+- Add `wrangler.demo.jsonc` and a `deploy:demo` script for a live demo Worker. The npm package does not include them.
+- Run the UI Playwright spec in CI. This does not change the package.
+- Write the publish workflow's auth line with `printf`. This does not change the package.
 
 ## 0.4.0 - 2026-10-29
 

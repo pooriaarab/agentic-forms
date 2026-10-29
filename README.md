@@ -152,10 +152,10 @@ A stdio server writes only MCP messages to stdout, so do not log there.
 
 `createFormRepo(store)` returns:
 
-- `get(id)` reads the head (the latest version, draft or published). It returns `null` when the form is missing. `getVersion(id, version)` reads one frozen version. It returns `null` when that version was never published.
+- `get(id)` reads the head (the latest version, draft or published). It returns `null` when the form is missing. `getVersion(id, version)` reads one frozen version. It returns `null` when that version was never published, or when `erase` removed it.
 - `getPublished(id)` reads the version that takes answers now. It returns `null` when the form is missing or no version is published yet.
 - `list()` reads every head, in order of id, and follows every page.
-- `save(form, { expectedVersion?, expectedRevision? })` stores a draft. It throws `FormError` on unsound logic. With `expectedVersion` or `expectedRevision`, the save is a compare-and-set: it throws `VersionConflictError` when the form changed since the caller read it.
+- `save(form, { expectedVersion?, expectedRevision? })` stores a draft. It throws `FormError` on unsound logic. `expectedRevision` makes the save a compare-and-set: it throws `VersionConflictError` when any save or publish came after the caller's read, or when the form was erased. `expectedVersion` throws only when a publish moved the version after that read, so it does not catch two draft saves.
 - `publish(id, { expectedRevision? })` freezes the head as a new version. It throws `FormError` when the form has faults for publishing, `VersionConflictError` when the head changed since `expectedRevision`, and `SnapshotExistsError` rather than replace a frozen version. It throws a plain `Error` when the form does not exist or is already published.
 - `erase(id)` deletes the head first, so no new answer lands, then every frozen version. It is safe to run again.
 

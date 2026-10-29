@@ -147,6 +147,27 @@ describe("a lock left by a crash", () => {
     expect((await pending).code).toBe(0);
   });
 
+  test("a data file with a bad shape is an error and is left as it was", () => {
+    const bad = [
+      '{"clock":"x","tables":{}}',
+      '{"tables":{"forms":{}}}',
+      '{"clock":1,"tables":{"forms":{"a":{"v":null,"doc":{}}}}}',
+      '{"clock":1,"tables":{"forms":{"a":{"v":5,"doc":{}}}}}',
+      '{"clock":1,"tables":{"forms":{"a":{"v":1,"doc":[]}}}}',
+      '{"forms":{"a":{"id":"a"}}}',
+    ];
+    for (const content of bad) {
+      const data = join(dir(), "data.json");
+      writeFileSync(data, content);
+      for (const args of [["responses", "poll"], ["new", "poll", "--title", "Poll"]]) {
+        const run = cliSync(data, args);
+        expect(run.status, `${content} ${args[0]}`).not.toBe(0);
+        expect(run.stderr).toContain("not an agentic-forms data file");
+      }
+      expect(readFileSync(data, "utf8")).toBe(content);
+    }
+  });
+
   test("a damaged data file is an error, not an empty store", () => {
     const data = join(dir(), "data.json");
     seed(data);

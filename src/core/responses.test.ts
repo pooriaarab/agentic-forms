@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { Form, Question } from "./form.js";
 import { createFormRepo } from "./repo.js";
 import { SubmitError, createResponses, toCsv } from "./responses.js";
-import { createMemoryStore } from "./store.js";
+import { createMemoryStore } from "agentic-identity";
 import { validateForm } from "./form.js";
 
 const q = (id: string, extra: Partial<Question> = {}): Question => ({ id, type: "short_text", label: id, required: false, ...extra });

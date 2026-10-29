@@ -2,7 +2,7 @@
 import { describe, expect, test } from "vitest";
 import type { Form } from "./form.js";
 import { FormError, SnapshotExistsError, VersionConflictError, createFormRepo } from "./repo.js";
-import { createMemoryStore } from "./store.js";
+import { createMemoryStore } from "agentic-identity";
 
 const form = (id: string, showIf?: Form["sections"][0]["showIf"]): Form => ({
   id,

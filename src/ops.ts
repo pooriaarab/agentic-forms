@@ -3,7 +3,7 @@ import { formSpecSchema, questionSchema } from "./core/schema.js";
 import type { Answers, Form } from "./core/form.js";
 import { createFormRepo } from "./core/repo.js";
 import { createResponses } from "./core/responses.js";
-import type { Store } from "./core/store.js";
+import type { Store } from "agentic-identity";
 
 export class OpsError extends Error {
   constructor(readonly kind: "not_found" | "conflict", message: string) {

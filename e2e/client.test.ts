@@ -71,6 +71,13 @@ describe("remote client against the Worker", () => {
 
     await api.share("poll", { subject: "ada", kind: "human", role: "viewer" });
     await api.revokeShare("poll", "ada", "human");
+    const invite = await api.invite("poll", { role: "viewer", handle: "helper", expiresInMs: 60_000 });
+    expect((await api.listInvites("poll")).invites.map((i) => i.id)).toEqual([invite.id]);
+    const link = await api.createLink("poll", { role: "viewer" });
+    expect((await api.listLinks("poll")).links).toMatchObject([{ id: link.id, role: "viewer", signedInOnly: false }]);
+    expect(await caught(api.createLink("poll", { role: "owner" as never }))).toMatchObject({ status: 400, code: "invalid_share" });
+    expect(await caught(api.revokeLink("poll", "."))).toBeInstanceOf(TypeError);
+    expect(await api.revokeLink("poll", link.id)).toEqual({ ok: true });
     expect((await api.listAudit("poll")).entries.length).toBeGreaterThan(0);
     expect(await api.purgeAll()).toMatchObject({ purged: 0 });
     expect(await api.backfillOwners("ada")).toMatchObject({ skipped: expect.any(Number) });

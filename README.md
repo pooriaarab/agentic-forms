@@ -59,7 +59,22 @@ npx agentic-forms shares poll                                           # who ho
 npx agentic-forms unshare poll --subject bob --kind human               # take it away
 ```
 
-Use an `https` URL: the token goes in a header. A role is `owner`, `editor`, or `viewer`. Only an owner may list shares. A refused call prints `error: <code>: <message>` and exits 1. The Worker has no share links: share with named people and agents. With the same two variables, `agentic-forms mcp` also has the tools `share_form`, `list_shares`, and `unshare_form`. Without them, these tools do not exist.
+Use an `https` URL: the token goes in a header. A role is `owner`, `editor`, or `viewer`. Only an owner may list shares. A refused call prints `error: <code>: <message>` and exits 1. With the same two variables, `agentic-forms mcp` also has the sharing tools below. Without them, these tools do not exist.
+
+Every sharing call needs the owner role:
+
+| Action | SDK (`createClient`) | CLI | MCP tool | HTTP (`/api/v1/forms/:id`) |
+|---|---|---|---|---|
+| Give a role | `share` | `share` | `share_form` | `POST /shares` |
+| List roles | `listShares` | `shares` | `list_shares` | `GET /shares` |
+| Take a role | `revokeShare` | `unshare` | `unshare_form` | `DELETE /shares/:subject?kind=` |
+| Invite by email or handle | `invite` | `invite` | `create_invite` | `POST /invites` |
+| List invites | `listInvites` | `invites` | `list_invites` | `GET /invites` |
+| Make a share link | `createLink` | `link` | `create_link` | `POST /links` |
+| List share links | `listLinks` | `links` | `list_links` | `GET /links` |
+| Revoke a share link | `revokeLink` | `unlink --link <id>` | `revoke_link` | `DELETE /links/:link` |
+
+An invite or a link that this API makes gives `editor` or `viewer`, never `owner`: only a share makes an owner. A list also shows a `commenter` invite or link that `agentic-identity` made. An invite names an `email` (a person) or a `handle` (an agent). `expiresInMs` (`--expires-in-ms`, at least 1000) sets how long it lives. `signedInOnly` (`--signed-in-only`) limits a link to signed-in people. A list shows no email and no link token: the token shows once, in the reply that makes the link. This Worker only makes and manages invites and links. To accept an invite or open a link, run `agentic-identity` on the same store.
 
 The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it). The file uses the store format of agentic-identity. A file written by 0.5.0 or earlier is refused and not migrated.
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.
@@ -122,7 +137,7 @@ try {
 }
 ```
 
-There is one method per API route: `health`, `listForms`, `createForm`, `getForm`, `updateForm`, `addQuestion`, `publishForm`, `listResponses`, `exportCsv`, `purge`, `eraseForm`, `share`, `listShares`, `revokeShare`, `listAudit`, `purgeAll`, `migrateGrants`, `backfillOwners`, and the public `submit` (it sends no token). `GET /f/<id>` is a page for people, so it has no method.
+There is one method per API route: `health`, `listForms`, `createForm`, `getForm`, `updateForm`, `addQuestion`, `publishForm`, `listResponses`, `exportCsv`, `purge`, `eraseForm`, `share`, `listShares`, `revokeShare`, `invite`, `listInvites`, `createLink`, `listLinks`, `revokeLink`, `listAudit`, `purgeAll`, `migrateGrants`, `backfillOwners`, and the public `submit` (it sends no token). `GET /f/<id>` is a page for people, so it has no method.
 
 - A refused call throws `ApiError` with `status` (HTTP status), `code` (the API `error` field), `message`, `retryAfter` (seconds, on a 429), and `issues` when the API lists faults.
 - Every method takes `{ signal }` last, to cancel the call with an `AbortSignal`. A cancel rejects with the reason of the signal (an `AbortError` by default).
@@ -171,7 +186,7 @@ What you can do in it:
 - List forms, and make a new one.
 - Build a form: add, edit, reorder, and remove questions of every type, with choices, limits, and a "show only when" condition. Save sends the whole draft. A save that follows a change made elsewhere is refused, and the page asks you to reload.
 - Preview the form. The preview shows and hides questions by their conditions and sends nothing.
-- Publish, and copy the share link `/f/<id>`. The link opens the public fill page, which uses the same tokens, in light and dark.
+- Publish, and copy the public link `/f/<id>`. The link opens the public fill page, which uses the same tokens, in light and dark.
 - Read the responses in a table (100 per page) and export them as CSV.
 - See which questions an agent made or changed. The server sets that mark from the caller. Only a person (a principal of kind `human`) makes human-marked questions. Every other kind, such as an agent, a delegated agent, or a personal token used by an agent, is marked as an agent. A credential of an agent principal shows the agent mark on every question it makes.
 
@@ -218,7 +233,7 @@ forms.unmount(); // remove the UI
 
 `getToken` may return a promise. An empty token, or a refused call, shows as an error in the UI. The person presses Try again after the token is valid. A missing
 `getToken` or a bad `baseUrl` throws a `TypeError` and renders nothing. The server still checks every call against
-the token. The share link of a form points at `baseUrl`. The pages follow the address hash
+the token. The public link of a form points at `baseUrl`. The pages follow the address hash
 (`#/forms/<id>`), so they own that hash while mounted. `react` and `react-dom` (version 19) are peer dependencies.
 `createClient` from `agentic-forms/client` also accepts a function for `token`.
 
@@ -237,7 +252,7 @@ the token. The share link of a form points at `baseUrl`. The pages follow the ad
 - Versions: `publish` freezes a version. Editing a published form starts a new
   draft. Old responses stay readable against their own version.
 - `exportCsv` writes every response as CSV. It makes formula cells inert.
-- Agent tools: eleven MCP tools, and three more with a Worker (`share_form`, `list_shares`, `unshare_form`). The CLI has these commands: `new`, `add-question`, `update`, `publish`, `submit`, `list`, `show`, `responses`, `export`, `purge`, `purge-all`, `from-prompt`, `backfill-owners`, and `mcp`. With a Worker, it also has `share`, `shares`, and `unshare`.
+- Agent tools: eleven MCP tools, and eight more with a Worker (`share_form`, `list_shares`, `unshare_form`, `create_invite`, `list_invites`, `create_link`, `list_links`, `revoke_link`). The CLI has these commands: `new`, `add-question`, `update`, `publish`, `submit`, `list`, `show`, `responses`, `export`, `purge`, `purge-all`, `from-prompt`, `backfill-owners`, and `mcp`. With a Worker, it also has `share`, `shares`, `unshare`, `invite`, `invites`, `link`, `links`, and `unlink`.
 - Access: every `/api/v1` route names the caller, and `can()` of `agentic-identity` decides it. The creator owns the form. Roles are owner, editor, and viewer. A viewer reads the form. An editor also edits, publishes, and reads answers. Only an owner shares, purges, deletes the form, and reads the audit log. A share names a kind, `human` or `agent`, because a person and an agent with the same id hold separate roles. Revoking with `DELETE .../shares/<subject>` needs `?kind=` too. Grants made before kinds are not honored until an admin runs `POST /api/v1/migrate-grants`: run it right after you deploy, and read `unresolved` in its answer. `backfill-owners` always makes the owner a person. A delegated agent keeps only the scopes it got. Each check is audited.
 - Storage runs on the `Store` port of `agentic-identity`. The Worker uses D1, the
   CLI uses a locked JSON file, and tests use the memory adapter.

@@ -14,6 +14,12 @@ import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
 const SUBJECT = SUBJECT_ID;
+/** The roles an invite or a link row may hold and still work. This API makes editor and viewer; the library also honors commenter. */
+const LISTED_ROLES: ReadonlySet<string> = new Set(["viewer", "commenter", "editor"]);
+/** A shorter lifetime could end before the library reads the clock again, and it is no use to a person. */
+const MIN_SHARE_MS = 1000;
+/** The handle rule of agentic-identity for an agent. The invite route checks it, so a bad handle is a 400, not a 500. */
+const HANDLE = /^[a-z][a-z0-9_-]{1,31}$/;
 const publishBody = z.object({ expectedRevision: z.number().int().min(0).optional() }).strict();
 const by = (ctx: PrincipalContext) => (isMachineMade(ctx.kind) ? "agent" : "human");
 const isSubjectKind = (kind: unknown): kind is SubjectKind => SUBJECT_KINDS.includes(kind as SubjectKind);
@@ -266,6 +272,91 @@ export function createApp(options: AppOptions = {}) {
       if (error instanceof Error && error.message === "the last owner cannot be removed") throw new OpsError("conflict", error.message);
       throw error;
     }
+    return c.json({ ok: true });
+  });
+  // Invites and share links. An owner makes them. The role is editor or viewer, never owner: only a grant makes an owner.
+  const pageOf = (c: Context): { limit?: number; cursor?: string } | Response => {
+    const raw = c.req.query("limit");
+    const limit = raw === undefined ? undefined : Number(raw);
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_AUDIT_PAGE)) {
+      return c.json({ error: "invalid_query", message: `limit is a whole number from 1 to ${MAX_AUDIT_PAGE}` }, 400);
+    }
+    const cursor = c.req.query("cursor");
+    if (cursor !== undefined && !wellFormedCursor(cursor)) return c.json({ error: "invalid_query", message: "the cursor is not valid" }, 400);
+    return { limit, cursor };
+  };
+  const invalidShare = (c: Context, message: string) => c.json({ error: "invalid_share", message }, 400);
+  /** The role and the lifetime that an invite or a link takes, or a 400. */
+  const shareTerms = (body: Record<string, unknown>): { role: "editor" | "viewer"; expiresInMs?: number } | string => {
+    if (body.role !== "editor" && body.role !== "viewer") return "give a role of editor or viewer";
+    const ms = body.expiresInMs;
+    if (ms !== undefined && (typeof ms !== "number" || !Number.isSafeInteger(ms) || ms < MIN_SHARE_MS || !Number.isSafeInteger(now() + ms))) return `expiresInMs is a whole number of milliseconds, at least ${MIN_SHARE_MS}, and it ends at a time that fits`;
+    return { role: body.role, ...(ms === undefined ? {} : { expiresInMs: ms }) };
+  };
+  const readBody = async (c: Context): Promise<Record<string, unknown>> => {
+    const body = await c.req.json();
+    return typeof body === "object" && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  };
+  app.post(`${forms}/:id/invites`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const body = await readBody(c);
+    const terms = shareTerms(body);
+    if (typeof terms === "string") return invalidShare(c, terms);
+    const { email, handle } = body;
+    if ((email === undefined) === (handle === undefined)) return invalidShare(c, "give an email or a handle, not both");
+    if (email !== undefined && (typeof email !== "string" || email.length > 254 || !/^[^\s@]+@[^\s@]+$/.test(email))) return invalidShare(c, "email is not valid: it has one @ and at most 254 characters");
+    if (handle !== undefined && (typeof handle !== "string" || !HANDLE.test(handle))) return invalidShare(c, "handle is a lowercase letter, then 1 to 31 of a-z, 0-9, \"-\" and \"_\"");
+    return c.json(await sharing.createInvite(c.get("ctx"), c.req.param("id"), { ...terms, ...(email === undefined ? { handle: handle as string } : { email: email as string }) }), 201);
+  });
+  // An invite shows no email: it says whether it is for an email or a handle.
+  app.get(`${forms}/:id/invites`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const page = pageOf(c);
+    if (page instanceof Response) return page;
+    const listed = await sharing.listInvites(c.get("ctx"), c.req.param("id"), page);
+    // An invite made by agentic-identity may carry commenter, which this API does not make but the library honors: list it. Owner and unknown roles are refused by the library, so they are not listed.
+    // The summary leaves out an expiry that is not a number, so it would look like "never". The library refuses such an invite, so read the row and leave it out.
+    const rows = await Promise.all(listed.invites.map((invite) => store.get("invites", invite.id)));
+    const invites = listed.invites.filter((invite, at) => LISTED_ROLES.has(invite.role) && (rows[at]?.expiresAt === undefined || (typeof rows[at]?.expiresAt === "number" && Number.isFinite(rows[at]?.expiresAt))));
+    return c.json({ ...listed, invites });
+  });
+  // The token shows once, in this reply. Only its hash is stored.
+  app.post(`${forms}/:id/links`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const body = await readBody(c);
+    const terms = shareTerms(body);
+    if (typeof terms === "string") return invalidShare(c, terms);
+    if (body.signedInOnly !== undefined && typeof body.signedInOnly !== "boolean") return invalidShare(c, "signedInOnly is true or false");
+    return c.json(await sharing.createLink(c.get("ctx"), c.req.param("id"), {
+      role: terms.role,
+      signedInOnly: body.signedInOnly === true,
+      ...(terms.expiresInMs === undefined ? {} : { expiresAt: now() + terms.expiresInMs }),
+    }), 201);
+  });
+  // The links of the form, without the token or its hash.
+  app.get(`${forms}/:id/links`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const page = pageOf(c);
+    if (page instanceof Response) return page;
+    const rows = await store.query("links", { where: { resourceId: c.req.param("id") }, ...page });
+    // A row with no id, a role that a link cannot give, or an expiry that is not a number is refused by the library, so it is not listed. A commenter link is honored, so it is.
+    const links = rows.items.filter(({ data: d }) => typeof d.id === "string" && LISTED_ROLES.has(d.role as string) && (d.expiresAt === undefined || (typeof d.expiresAt === "number" && Number.isFinite(d.expiresAt)))).map(({ data: d }) => ({
+      id: d.id as string,
+      role: d.role as "viewer" | "commenter" | "editor",
+      signedInOnly: d.signedInOnly === true,
+      ...(typeof d.expiresAt === "number" ? { expiresAt: d.expiresAt } : {}),
+      ...(d.revokedAt != null ? { revokedAt: typeof d.revokedAt === "number" ? d.revokedAt : 0 } : {}),
+    }));
+    return c.json({ links, ...(rows.nextCursor === undefined ? {} : { nextCursor: rows.nextCursor }) });
+  });
+  // A link of another form is 404 here, even for an owner of both.
+  app.delete(`${forms}/:id/links/:link`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    const linkId = c.req.param("link");
+    const link = SUBJECT.test(linkId) ? await store.get("links", linkId) : null;
+    if (link === null || link.resourceId !== c.req.param("id")) throw new OpsError("not_found", "no such link on this form");
+    // A second revoke keeps the first revoke time and writes no second audit entry.
+    if (link.revokedAt == null) await sharing.revokeLink(c.get("ctx"), linkId);
     return c.json({ ok: true });
   });
   app.get(`${forms}/:id/audit`, async (c) => {

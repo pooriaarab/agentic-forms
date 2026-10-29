@@ -13,6 +13,43 @@ export type FormUpdateInput = z.input<typeof formUpdateSchema>;
 export type QuestionInput = z.input<typeof questionSchema>;
 export type ShareRole = "owner" | "editor" | "viewer";
 export type SubjectKind = "human" | "agent";
+/** An invite or a link gives editor or viewer. Only a grant makes an owner. */
+export type InviteRole = "editor" | "viewer";
+/** A role a listed invite or link can hold. This API makes editor and viewer. A row made by agentic-identity may also be commenter. */
+export type ListedRole = InviteRole | "commenter";
+export interface InviteInput {
+  role: InviteRole;
+  /** The person to invite. Give this or `handle`. */
+  email?: string;
+  /** The agent to invite. Give this or `email`. */
+  handle?: string;
+  /** How long the invite lives, in milliseconds. */
+  expiresInMs?: number;
+}
+export interface LinkInput {
+  role: InviteRole;
+  signedInOnly?: boolean;
+  expiresInMs?: number;
+}
+/** An invite as a list shows it: no email. */
+export interface FormInvite {
+  id: string;
+  resourceId: string;
+  role: ListedRole;
+  for: "email" | "handle";
+  handle?: string;
+  expiresAt?: number;
+  acceptedAt?: number;
+  revokedAt?: number;
+}
+/** A link as a list shows it: no token. */
+export interface FormLink {
+  id: string;
+  role: ListedRole;
+  signedInOnly: boolean;
+  expiresAt?: number;
+  revokedAt?: number;
+}
 
 export interface ClientOptions {
   /** The Worker origin as an absolute URL, for example "https://forms.example.com". A path prefix is kept. */
@@ -154,6 +191,21 @@ export function createClient(options: ClientOptions) {
     /** DELETE /api/v1/forms/:id/shares/:subject?kind=. */
     revokeShare: (formId: string, subject: string, kind: SubjectKind, call: CallOptions = {}) =>
       json<{ ok: true }>("DELETE", `${form(formId)}/shares/${id(subject)}`, { signal: call.signal, query: { kind } }),
+    /** POST /api/v1/forms/:id/invites. Invite a person by `email` or an agent by `handle`, not both. The role is editor or viewer. Owner only. */
+    invite: (formId: string, invite: InviteInput, call: CallOptions = {}) =>
+      json<{ id: string }>("POST", `${form(formId)}/invites`, { signal: call.signal, body: invite }),
+    /** GET /api/v1/forms/:id/invites. One page. An invite shows no email. Owner only. */
+    listInvites: (formId: string, query: { limit?: number; cursor?: string } = {}, call: CallOptions = {}) =>
+      json<{ invites: FormInvite[]; nextCursor?: string }>("GET", `${form(formId)}/invites`, { signal: call.signal, query }),
+    /** POST /api/v1/forms/:id/links. The token shows once, in this reply. Owner only. */
+    createLink: (formId: string, link: LinkInput, call: CallOptions = {}) =>
+      json<{ id: string; token: string }>("POST", `${form(formId)}/links`, { signal: call.signal, body: link }),
+    /** GET /api/v1/forms/:id/links. One page. A link shows no token. Owner only. */
+    listLinks: (formId: string, query: { limit?: number; cursor?: string } = {}, call: CallOptions = {}) =>
+      json<{ links: FormLink[]; nextCursor?: string }>("GET", `${form(formId)}/links`, { signal: call.signal, query }),
+    /** DELETE /api/v1/forms/:id/links/:link. Owner only. */
+    revokeLink: (formId: string, linkId: string, call: CallOptions = {}) =>
+      json<{ ok: true }>("DELETE", `${form(formId)}/links/${id(linkId)}`, { signal: call.signal }),
     /** GET /api/v1/forms/:id/audit. Owner only. */
     listAudit: (formId: string, query: { limit?: number; cursor?: string } = {}, call: CallOptions = {}) =>
       json<{ entries: AuditEntry[]; nextCursor?: string }>("GET", `${form(formId)}/audit`, { signal: call.signal, query }),

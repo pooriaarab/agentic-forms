@@ -93,9 +93,29 @@ describe("sharing from the CLI", () => {
     expect(last.err).toContain("last owner");
   });
 
+  test("invite, link, and unlink work, and a list shows no email and no token", () => {
+    expect(cli(["invite", "poll", "--role", "viewer", "--email", "ada@example.com"]).code).toBe(2);
+    const invite = cli(["invite", "poll", "--role", "viewer", "--email", "ada@example.com", "--expires-in-ms", "60000"], ADA);
+    expect(invite.code).toBe(0);
+    const link = JSON.parse(cli(["link", "poll", "--role", "viewer", "--signed-in-only"], ADA).out) as { id: string; token: string };
+    expect(link.token).toBeTruthy();
+    const invites = cli(["invites", "poll"], ADA).out;
+    expect(JSON.parse(invites).invites).toHaveLength(1);
+    expect(invites).not.toContain("example.com");
+    const links = cli(["links", "poll"], ADA).out;
+    expect(JSON.parse(links).links).toMatchObject([{ id: link.id, signedInOnly: true }]);
+    expect(links).not.toContain(link.token);
+    expect(cli(["links", "poll"], BOB).code).toBe(1);
+    expect(cli(["link", "poll", "--role", "owner"], ADA).code).toBe(2);
+    expect(cli(["invite", "poll", "--role", "viewer"], ADA).code).toBe(2);
+    expect(cli(["unlink", "poll"], ADA).code).toBe(2);
+    expect(JSON.parse(cli(["unlink", "poll", "--link", link.id], ADA).out)).toEqual({ ok: true });
+    expect(cli(["unlink", "poll", "--link", "nope"], ADA).err).toContain("not_found");
+  });
+
   test("--help lists the commands", () => {
     const help = cli(["--help"]).out;
-    for (const word of ["share <id>", "shares <id>", "unshare <id>", "share_form", "--url"]) expect(help).toContain(word);
+    for (const word of ["share <id>", "shares <id>", "unshare <id>", "invite <id>", "link <id>", "unlink <id>", "create_link", "share_form", "--url"]) expect(help).toContain(word);
   });
 });
 
@@ -128,6 +148,20 @@ describe("sharing from MCP", () => {
     expect(listed.map((g) => `${g.subjectId}:${g.role}`).sort()).toEqual(["ada:owner", "bot:editor"]);
     expect(JSON.parse((await call("unshare_form", { form: "poll", subject: "bot", kind: "agent" })).text)).toEqual({ ok: true });
     expect(JSON.parse((await call("list_shares", { form: "poll" })).text).grants).toHaveLength(1);
+  });
+
+  test("it invites, makes and revokes links, and lists without secrets", async () => {
+    const names = (await mcp.listTools()).tools.map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(["create_invite", "list_invites", "create_link", "list_links", "revoke_link"]));
+    expect((await call("create_invite", { form: "poll", role: "editor", handle: "helper" })).error).toBe(false);
+    expect(JSON.parse((await call("list_invites", { form: "poll" })).text).invites.some((i: { handle?: string }) => i.handle === "helper")).toBe(true);
+    const link = JSON.parse((await call("create_link", { form: "poll", role: "viewer" })).text) as { id: string; token: string };
+    const listed = (await call("list_links", { form: "poll" })).text;
+    expect(listed).toContain(link.id);
+    expect(listed).not.toContain(link.token);
+    expect(JSON.parse((await call("revoke_link", { form: "poll", link: link.id })).text)).toEqual({ ok: true });
+    expect((await call("create_link", { form: "poll", role: "owner" })).error).toBe(true);
+    expect((await call("revoke_link", { form: "poll", link: "nope" })).text).toContain("not_found");
   });
 
   test("a refusal is a tool error with the code", async () => {

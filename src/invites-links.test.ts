@@ -48,6 +48,12 @@ describe("invites", () => {
     for (const handle of ["a", "a".repeat(33), "A1", "-ab"]) expect((await call(olga, "POST", "/a/invites", { role: "viewer", handle })).status, handle).toBe(400);
   });
 
+  test("an invite row that grants a role no invite can give is not listed", async () => {
+    await store.put("invites", "odd", { id: "odd", resourceId: "a", role: "owner", handle: "helper" });
+    await store.put("invites", "fine", { id: "fine", resourceId: "a", role: "viewer", handle: "helper" });
+    expect((await json(await call(olga, "GET", "/a/invites"))).invites.map((i: { id: string }) => i.id)).toEqual(["fine"]);
+  });
+
   test("bad input is 400 and stores nothing", async () => {
     const bad = [
       { role: "owner", handle: "x" },

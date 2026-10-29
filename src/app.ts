@@ -309,7 +309,9 @@ export function createApp(options: AppOptions = {}) {
     await require(c, "admin", c.req.param("id"));
     const page = pageOf(c);
     if (page instanceof Response) return page;
-    return c.json(await sharing.listInvites(c.get("ctx"), c.req.param("id"), page));
+    const listed = await sharing.listInvites(c.get("ctx"), c.req.param("id"), page);
+    // An invite with a role that no invite can give is not honored, so it is not listed.
+    return c.json({ ...listed, invites: listed.invites.filter((invite) => invite.role === "editor" || invite.role === "viewer") });
   });
   // The token shows once, in this reply. Only its hash is stored.
   app.post(`${forms}/:id/links`, async (c) => {

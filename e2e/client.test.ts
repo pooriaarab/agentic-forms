@@ -10,12 +10,13 @@ const TOKEN = "e2e-client-token-0123456789-0123456789";
 const RATE_SECRET = "e2e-rate-secret-0123456789-0123456789";
 const PORT = 8830;
 const baseUrl = `http://127.0.0.1:${PORT}`;
+// The inspector port is not the default, so this file can run next to the Worker e2e file.
 // Close each connection, as the Worker e2e does, so an idle socket is never reused.
 const fetchClose: typeof fetch = (input, init) => fetch(input, { ...init, headers: { connection: "close", ...(init?.headers as Record<string, string> | undefined) } });
 let proc: ChildProcess;
 
 beforeAll(async () => {
-  proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(PORT), "--persist-to", mkdtempSync(join(tmpdir(), "forms-d1-")), "--var", "FORMS_REGION:unknown", "--var", "FORMS_UNSAFE_LOCAL_REGION:1", "--var", `FORMS_RATE_SECRET:${RATE_SECRET}`, "--var", `FORMS_API_TOKEN:${TOKEN}`], {
+  proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(PORT), "--inspector-port", "9330", "--persist-to", mkdtempSync(join(tmpdir(), "forms-d1-")), "--var", "FORMS_REGION:unknown", "--var", "FORMS_UNSAFE_LOCAL_REGION:1", "--var", `FORMS_RATE_SECRET:${RATE_SECRET}`, "--var", `FORMS_API_TOKEN:${TOKEN}`], {
     env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
   });
   let log = "";
@@ -147,10 +148,17 @@ describe("the client without a token", () => {
     expect(await caught(createClient({ baseUrl, fetch: limited }).submit("poll", {}))).toMatchObject({ status: 429, code: "rate_limited", retryAfter: 17 });
   });
 
+  test("an empty retry-after header gives no retryAfter", async () => {
+    const limited: typeof fetch = async () => new Response("{}", { status: 429, headers: { "retry-after": " " } });
+    expect(((await caught(createClient({ baseUrl, fetch: limited }).submit("poll", {}))) as ApiError).retryAfter).toBeUndefined();
+  });
+
   test("a bad base URL or an empty token is refused", () => {
     expect(() => createClient({ baseUrl: "", token: "t" })).toThrow(TypeError);
     expect(() => createClient({ baseUrl, token: "" })).toThrow(TypeError);
     expect(() => createClient({ baseUrl: "forms.example.com", token: "t" })).toThrow(TypeError);
     expect(() => createClient({ baseUrl: "https://x.test/?a=1", token: "t" })).toThrow(TypeError);
+    expect(() => createClient({ baseUrl: "https://x.test?", token: "t" })).toThrow(TypeError);
+    expect(() => createClient({ baseUrl: "https://x.test#", token: "t" })).toThrow(TypeError);
   });
 });

@@ -18,7 +18,7 @@ export interface ClientOptions {
   baseUrl: string;
   /** The bearer token for /api/v1. Leave it out to call only `health` and `submit`, which send no token. */
   token?: string;
-  /** Replaces the global fetch. Use it to add a proxy, a service binding, or a test double. */
+  /** Replaces the global fetch. Use it to add a proxy or a test double. For a service binding, wrap it: `(input, init) => env.FORMS.fetch(input, init)`. */
   fetch?: typeof fetch;
 }
 
@@ -63,7 +63,9 @@ export function createClient(options: ClientOptions) {
     throw new TypeError("baseUrl must be an absolute URL");
   }
   if (parsed.search !== "" || parsed.hash !== "") throw new TypeError("baseUrl must have no query or fragment");
-  const base = options.baseUrl.replace(/\/+$/, "");
+  // An empty "?" or "#" at the end passes the check above, so the base is built from the parsed parts.
+  if (/[?#]/.test(options.baseUrl)) throw new TypeError("baseUrl must have no query or fragment");
+  const base = (parsed.origin + parsed.pathname).replace(/\/+$/, "");
   const doFetch = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init));
   const id = encodeURIComponent;
 
@@ -88,8 +90,9 @@ export function createClient(options: ClientOptions) {
     // A body that is not JSON (the public page answers text) still explains the fault.
     const plain = body === undefined && text !== "" && text.length <= 200 && !text.trimStart().startsWith("<") ? text : undefined;
     const message = typeof record.message === "string" ? record.message : (plain ?? `${method} ${path} failed: ${res.status} ${code}`);
-    const wait = Number(res.headers.get("retry-after"));
-    throw new ApiError(res.status, code, message, body, Array.isArray(record.issues) ? record.issues : undefined, Number.isFinite(wait) && res.headers.get("retry-after") !== null ? wait : undefined);
+    const header = res.headers.get("retry-after")?.trim();
+    const wait = header === undefined || header === "" ? Number.NaN : Number(header);
+    throw new ApiError(res.status, code, message, body, Array.isArray(record.issues) ? record.issues : undefined, Number.isFinite(wait) ? wait : undefined);
   }
   const json = async <T>(method: string, path: string, opts: Parameters<typeof send>[2] = {}): Promise<T> => {
     const res = await send(method, path, opts);

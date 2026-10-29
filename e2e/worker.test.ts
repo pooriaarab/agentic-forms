@@ -1,6 +1,6 @@
 // Runs the Worker under `wrangler dev`, drives /api/v1 over HTTP, then fills in the
 // public page with jsdom (it runs the page's own script) and reads the row back.
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import { JSDOM } from "jsdom";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 const TOKEN = "e2e-token-0123456789-0123456789-abcdef"; // 40 bytes
+const RATE_SECRET = "e2e-rate-secret-0123456789-0123456789"; // 38 bytes
 const PORT = 8799;
 const base = `http://127.0.0.1:${PORT}`;
 const auth = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
@@ -15,9 +16,9 @@ const running: ChildProcess[] = [];
 
 // Starts `wrangler dev` and waits until it answers any request. A Worker that
 // refuses to start answers 500, so readiness is "any HTTP status".
-async function start(port: number, token?: string, options: { persist?: string; vars?: string[] } = {}): Promise<ChildProcess> {
-  const vars = [...(token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`]), ...(options.vars ?? []).flatMap((v) => ["--var", v])];
-  const proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(port), "--persist-to", options.persist ?? mkdtempSync(join(tmpdir(), "forms-d1-")), ...vars], {
+async function start(port: number, token?: string, options: { persist?: string; vars?: string[]; scheduled?: boolean } = {}): Promise<ChildProcess> {
+  const vars = [...(options.vars?.some((v) => v.startsWith("FORMS_RATE_SECRET:")) ? [] : ["--var", `FORMS_RATE_SECRET:${RATE_SECRET}`]), ...(token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`]), ...(options.vars ?? []).flatMap((v) => ["--var", v])];
+  const proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(port), ...(options.scheduled ? ["--test-scheduled"] : []), "--persist-to", options.persist ?? mkdtempSync(join(tmpdir(), "forms-d1-")), ...vars], {
     env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
   });
   running.push(proc);
@@ -106,9 +107,63 @@ describe("durable storage", () => {
     expect(rows.items.map((r: { values: { n: string } }) => r.values.n)).toEqual(["kept"]);
   });
 
+  test("a missing or short rate limit secret stops requests, and the purge job still runs", async () => {
+    const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
+    for (const [i, secret] of ["", "short"].entries()) {
+      const port = 8820 + i;
+      await start(port, TOKEN, { persist, scheduled: true, vars: [`FORMS_RATE_SECRET:${secret}`] });
+      expect((await fetch(`http://127.0.0.1:${port}/health`)).status, `secret "${secret}"`).toBe(500);
+      expect((await fetch(`http://127.0.0.1:${port}/__scheduled?cron=7+*+*+*+*`)).status).toBe(200);
+    }
+  });
+
   test("a region that is not eu or us makes the Worker refuse to serve", async () => {
-    await start(8805, TOKEN, { vars: ["FORMS_REGION:mars"] });
-    expect((await fetch("http://127.0.0.1:8805/health")).status).toBe(500);
+    for (const [i, region] of ["mars", "unknown"].entries()) {
+      await start(8805 + i, TOKEN, { vars: [`FORMS_REGION:${region}`] });
+      expect((await fetch(`http://127.0.0.1:${8805 + i}/health`)).status, region).toBe(500);
+    }
+  });
+});
+
+describe("scheduled purge", () => {
+  const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
+  const sql = (command: string) =>
+    JSON.parse(
+      execFileSync("node_modules/.bin/wrangler", ["d1", "execute", "DB", "--local", "--persist-to", persist, "--json", "--command", command], {
+        encoding: "utf8",
+        env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
+      }),
+    )[0].results as Record<string, unknown>[];
+  const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
+  const ids = (collection: string) => sql(`SELECT id FROM store_docs WHERE collection = '${collection}' ORDER BY id`).map((r) => r.id);
+  const row = (id: string, retainUntil: string) =>
+    JSON.stringify({ id, formId: "purge", formVersion: 1, submittedAt: "2020-01-01T00:00:00.000Z", values: { n: id }, retainUntil });
+
+  test("the Cron Trigger hard-deletes expired rows and keeps the rest", async () => {
+    const port = 8810;
+    await start(port, TOKEN, { persist, scheduled: true });
+    const open = { id: "purge", title: "Purge", retentionDays: 30, publish: true, sections: [{ id: "s", title: "S", questions: [{ id: "n", type: "short_text", label: "N", required: true }] }] };
+    expect((await fetch(`http://127.0.0.1:${port}/api/v1/forms`, { method: "POST", headers, body: JSON.stringify(open) })).status).toBe(201);
+    expect((await fetch(`http://127.0.0.1:${port}/f/purge`, { method: "POST", headers, body: JSON.stringify({ answers: { n: "live" } }) })).status).toBe(201);
+    const [live] = ids("responses") as string[];
+
+    // Old rows, made directly in the database: one expired, one with a date that is not a time.
+    const insert = (id: string, body: string) => sql(`INSERT INTO store_docs (collection, id, body) VALUES ('responses', '${id}', '${body}')`);
+    insert("old-1", row("old-1", "2020-02-01T00:00:00.000Z"));
+    insert("old-2", row("old-2", "not a date"));
+    sql(`INSERT INTO store_docs (collection, id, body) VALUES ('rate_limits', 'finished', '{"start":0,"count":1,"windowMs":60000}')`);
+    expect(ids("responses")).toEqual([live, "old-1", "old-2"].sort());
+    const before = await (await fetch(`http://127.0.0.1:${port}/api/v1/forms/purge/responses`, { headers })).json();
+    expect(before.items).toHaveLength(1); // the read-time filter already hides them
+
+    // Run the job the way the platform does.
+    const run = await fetch(`http://127.0.0.1:${port}/__scheduled?cron=7+*+*+*+*`);
+    expect(run.status).toBe(200);
+
+    expect(ids("responses")).toEqual([live]); // gone from storage, not only hidden
+    expect(ids("rate_limits")).not.toContain("finished");
+    const after = await (await fetch(`http://127.0.0.1:${port}/api/v1/forms/purge/responses`, { headers })).json();
+    expect(after.items.map((r: { values: { n: string } }) => r.values.n)).toEqual(["live"]);
   });
 });
 

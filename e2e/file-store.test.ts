@@ -150,6 +150,7 @@ describe("a lock left by a crash", () => {
   test("a data file with a bad shape is an error and is left as it was", () => {
     const bad = [
       '{"clock":"x","tables":{}}',
+      '{"clock":-5,"tables":{}}',
       '{"tables":{"forms":{}}}',
       '{"clock":1,"tables":{"forms":{"a":{"v":null,"doc":{}}}}}',
       '{"clock":1,"tables":{"forms":{"a":{"v":5,"doc":{}}}}}',

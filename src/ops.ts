@@ -2,7 +2,8 @@
 import { formSpecSchema, questionSchema } from "./core/schema.js";
 import type { Answers, Form } from "./core/form.js";
 import { createFormRepo } from "./core/repo.js";
-import { createResponses } from "./core/responses.js";
+import { purgeRateLimits } from "./core/rate-limit.js";
+import { createResponses, purgeExpiredResponses } from "./core/responses.js";
 import type { Store } from "agentic-identity";
 
 export class OpsError extends Error {
@@ -54,6 +55,18 @@ export function createOps(store: Store) {
     async exportCsv(formId: string) {
       await get(formId);
       return responses.exportCsv(formId);
+    },
+    /**
+     * Hard-deletes responses past retention in every form, and finished rate-limit
+     * counters. The scheduled job runs this. Each part runs even when the other
+     * fails, and the failure is then thrown.
+     */
+    async purgeAll(now: number = Date.now()) {
+      const [purged, rateLimits] = await Promise.allSettled([purgeExpiredResponses(store, now), purgeRateLimits(store, now)]);
+      if (purged.status === "rejected" || rateLimits.status === "rejected") {
+        throw new AggregateError([purged, rateLimits].flatMap((r) => (r.status === "rejected" ? [r.reason] : [])), "the purge failed");
+      }
+      return { purged: purged.value, rateLimits: rateLimits.value };
     },
     async purge(formId: string) {
       await get(formId);

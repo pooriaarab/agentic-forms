@@ -1,6 +1,7 @@
 import { validateAnswers, type Answers, type Form, type Issue } from "./form.js";
 import type { FormRepo } from "./repo.js";
 import type { Doc, Store } from "agentic-identity";
+import { purgeOrdered, type PurgeBudget } from "./purge.js";
 
 const COLLECTION = "responses";
 
@@ -42,6 +43,22 @@ const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 /** True only for a valid ISO time at or after now. Any other value fails closed. */
 const stillRetained = (retainUntil: unknown, now: number): boolean =>
   typeof retainUntil === "string" && ISO_TIME.test(retainUntil) && Date.parse(retainUntil) >= now;
+
+/**
+ * Hard-deletes responses past retention in every form, oldest first. A date
+ * that is not a valid time counts as expired. It reads a bounded number of
+ * pages, so a large backlog takes several runs. Returns the count.
+ */
+export async function purgeExpiredResponses(store: Store, now: number = Date.now(), budget?: PurgeBudget): Promise<number> {
+  const notATime = (doc: Doc) => !(typeof doc.retainUntil === "string" && ISO_TIME.test(doc.retainUntil) && Number.isFinite(Date.parse(doc.retainUntil)));
+  return (
+    (await purgeOrdered(store, COLLECTION, { orderBy: { field: "retainUntil" } }, (doc) => !stillRetained(doc.retainUntil, now), budget)) +
+    // Text that is not a time sorts last, so read from that end too.
+    (await purgeOrdered(store, COLLECTION, { orderBy: { field: "retainUntil", direction: "desc" } }, notATime, budget)) +
+    // An ordered read never reaches a null date.
+    (await purgeOrdered(store, COLLECTION, { where: { retainUntil: null } }, () => true, budget))
+  );
+}
 
 export function createResponses(store: Store, repo: FormRepo) {
   type Page = { items: { id: string; data: Response }[]; nextCursor?: string };

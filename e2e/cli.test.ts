@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { createFileStore } from "../src/core/file-store.js";
 
 const data = join(mkdtempSync(join(tmpdir(), "forms-cli-")), "data.json");
 const cli = (args: string[], input?: string) => {
@@ -44,6 +45,19 @@ describe("cli failures", () => {
 
   test("a second form with the same id exits 1", () => {
     expect(cli(["new", "bad", "--title", "Again"]).code).toBe(1);
+  });
+});
+
+describe("cli purge-all", () => {
+  test("it deletes expired rows in every form and keeps the rest", async () => {
+    const store = createFileStore(data);
+    const old = { formId: "any", formVersion: 1, submittedAt: "2020-01-01T00:00:00.000Z", values: {} };
+    await store.put("responses", "old-a", { ...old, retainUntil: "2020-02-01T00:00:00.000Z" });
+    await store.put("responses", "old-b", { ...old, formId: "other", retainUntil: "2020-03-01T00:00:00.000Z" });
+    await store.put("responses", "keep", { ...old, retainUntil: "2999-01-01T00:00:00.000Z" });
+    expect(json(cli(["purge-all"]).out)).toEqual({ purged: 2, rateLimits: 0 });
+    expect((await store.query("responses")).items.map((i) => i.id)).toEqual(["keep"]);
+    expect(json(cli(["purge-all"]).out)).toEqual({ purged: 0, rateLimits: 0 });
   });
 });
 

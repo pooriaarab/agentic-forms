@@ -30,6 +30,7 @@ const base = (extra: Partial<Form> = {}): Form => ({
   ...extra,
 });
 
+const SECRET = "r".repeat(32);
 let repo: ReturnType<typeof createFormRepo>;
 let responses: ReturnType<typeof createResponses>;
 let store: ReturnType<typeof createMemoryStore>;
@@ -48,7 +49,7 @@ beforeEach(() => {
 
 describe("page", () => {
   test("a draft or missing form is a 404", async () => {
-    const app = createApp({ store });
+    const app = createApp({ rateLimitSecret: SECRET, store });
     await repo.save(base());
     expect((await app.request("/f/f")).status).toBe(404);
     expect((await app.request("/f/none")).status).toBe(404);
@@ -56,14 +57,14 @@ describe("page", () => {
 
   test("text from the form author is escaped", async () => {
     await publish(base({ title: evil, notice: evil, sections: [{ id: "s", title: evil, questions: [{ id: "c", type: "dropdown", label: evil, required: false, choices: [evil] }] }] }));
-    const html = await (await createApp({ store }).request("/f/f")).text();
+    const html = await (await createApp({ rateLimitSecret: SECRET, store }).request("/f/f")).text();
     expect(html).not.toContain("<img");
     expect(html).toContain("&lt;img");
   });
 
   test("the page loads nothing from outside and locks the policy", async () => {
     await publish(base());
-    const res = await createApp({ store }).request("/f/f");
+    const res = await createApp({ rateLimitSecret: SECRET, store }).request("/f/f");
     const html = await res.text();
     expect(html).not.toMatch(/(src|href|action)="https?:/);
     expect(html).not.toMatch(/@import|url\(/);
@@ -77,7 +78,7 @@ describe("page", () => {
 
   test("every control has a label, the page has a language and one main landmark", async () => {
     await publish(base());
-    const html = await (await createApp({ store }).request("/f/f")).text();
+    const html = await (await createApp({ rateLimitSecret: SECRET, store }).request("/f/f")).text();
     expect(html).toContain('<html lang="en">');
     expect(html.match(/<main/g)).toHaveLength(1);
     expect(html.match(/<h1/g)).toHaveLength(1);
@@ -89,7 +90,7 @@ describe("page", () => {
 
   test("the notice and retention show, with a required consent box", async () => {
     await publish(base({ notice: "We use your name to reply.", retentionDays: 30 }));
-    const html = await (await createApp({ store }).request("/f/f")).text();
+    const html = await (await createApp({ rateLimitSecret: SECRET, store }).request("/f/f")).text();
     expect(html).toContain("We use your name to reply.");
     expect(html).toContain("30 days");
     expect(html).toContain('id="consent"');
@@ -99,14 +100,14 @@ describe("page", () => {
 describe("submit", () => {
   test("a good answer is stored as a row", async () => {
     await publish(base());
-    const res = await post(createApp({ store }), { answers: { name: "Ada", color: "blue" } });
+    const res = await post(createApp({ rateLimitSecret: SECRET, store }), { answers: { name: "Ada", color: "blue" } });
     expect(res.status).toBe(201);
     expect((await responses.list("f")).items[0].data.values).toEqual({ name: "Ada", color: "blue" });
   });
 
   test("bad JSON is 400, an oversized body is 413, bad answers are 422, and nothing is stored", async () => {
     await publish(base());
-    const app = createApp({ store });
+    const app = createApp({ rateLimitSecret: SECRET, store });
     expect((await post(app, "{nope")).status).toBe(400);
     expect((await post(app, { answers: { name: "x".repeat(70_000) } })).status).toBe(413);
     const bad = await post(app, { answers: { color: "blue" } });
@@ -118,7 +119,7 @@ describe("submit", () => {
 
   test("a form with a notice refuses an answer without consent", async () => {
     await publish(base({ notice: "Notice." }));
-    const app = createApp({ store });
+    const app = createApp({ rateLimitSecret: SECRET, store });
     expect((await post(app, { answers: { name: "Ada" } })).status).toBe(422);
     expect((await post(app, { answers: { name: "Ada" }, consent: true })).status).toBe(201);
     expect((await responses.list("f")).items[0].data).toMatchObject({ consent: true });
@@ -127,7 +128,7 @@ describe("submit", () => {
   test("the rate limit answers 429 per client and recovers after the window", async () => {
     await publish(base());
     let now = 0;
-    const app = createApp({ store, rateLimit: { limit: 2, windowMs: 1000 }, now: () => now });
+    const app = createApp({ rateLimitSecret: SECRET, store, rateLimit: { limit: 2, windowMs: 1000 }, now: () => now });
     const send = (ip: string) => post(app, { answers: { name: "a" } }, { "cf-connecting-ip": ip });
     expect([(await send("1.1.1.1")).status, (await send("1.1.1.1")).status]).toEqual([201, 201]);
     const blocked = await send("1.1.1.1");
@@ -138,10 +139,32 @@ describe("submit", () => {
     expect((await send("1.1.1.1")).status).toBe(201);
   });
 
+  test("a post to an unknown or unpublished form makes no counter", async () => {
+    const app = createApp({ rateLimitSecret: SECRET, store });
+    expect((await app.request("/f/ghost", { method: "POST", body: "{}" })).status).toBe(404);
+    expect((await store.query("rate_limits")).items).toHaveLength(0);
+  });
+
+  test("the app refuses to start without a rate limit secret of 32 bytes, unless the limit is off", () => {
+    for (const rateLimitSecret of [undefined, "", "x".repeat(31)]) expect(() => createApp({ store, rateLimitSecret })).toThrow("secret");
+    expect(() => createApp({ store, rateLimit: false })).not.toThrow();
+  });
+
+  test("the purge route needs the token and deletes expired rows in every form", async () => {
+    await publish(base());
+    await store.put("responses", "old", { id: "old", formId: "f", formVersion: 1, submittedAt: "2020-01-01T00:00:00.000Z", values: {}, retainUntil: "2020-02-01T00:00:00.000Z" });
+    const app = createApp({ rateLimitSecret: SECRET, store, apiToken: "t".repeat(32) });
+    expect((await app.request("/api/v1/purge", { method: "POST" })).status).toBe(401);
+    expect(await store.get("responses", "old")).not.toBeNull();
+    const run = await app.request("/api/v1/purge", { method: "POST", headers: { authorization: `Bearer ${"t".repeat(32)}` } });
+    expect(await run.json()).toEqual({ purged: 1, rateLimits: 0 });
+    expect(await store.get("responses", "old")).toBeNull();
+  });
+
   test("the bot check is off by default and blocks when it says no", async () => {
     await publish(base());
-    expect((await post(createApp({ store }), { answers: { name: "a" } })).status).toBe(201);
-    const closed = createApp({ store, botCheck: (_req, body) => body.botToken === "ok" });
+    expect((await post(createApp({ rateLimitSecret: SECRET, store }), { answers: { name: "a" } })).status).toBe(201);
+    const closed = createApp({ rateLimitSecret: SECRET, store, botCheck: (_req, body) => body.botToken === "ok" });
     expect((await post(closed, { answers: { name: "b" } })).status).toBe(403);
     expect((await post(closed, { answers: { name: "c" }, botToken: "ok" })).status).toBe(201);
     expect((await responses.list("f")).items).toHaveLength(2);
@@ -221,7 +244,7 @@ describe("body cap while streaming", () => {
 
   test("a stream with no length is cut off past the cap and 413 is the answer", async () => {
     await publish(base());
-    const app = createApp({ store, rateLimit: false });
+    const app = createApp({ rateLimitSecret: SECRET, store, rateLimit: false });
     let pulled = 0;
     const endless = new ReadableStream<Uint8Array>({
       pull(controller) {
@@ -237,7 +260,7 @@ describe("body cap while streaming", () => {
 
   test("a body of multi-byte text is counted in bytes, not characters", async () => {
     await publish(base());
-    const app = createApp({ store, rateLimit: false });
+    const app = createApp({ rateLimitSecret: SECRET, store, rateLimit: false });
     const name = "é".repeat(CAP / 2 + 100); // fewer characters than the cap, more bytes
     const body = JSON.stringify({ answers: { name } });
     expect(body.length).toBeLessThan(CAP);
@@ -247,7 +270,7 @@ describe("body cap while streaming", () => {
 
   // Real HTTP: node sends the body with Transfer-Encoding: chunked and no Content-Length.
   async function sendChunked(chunks: string[]): Promise<{ status: number; sawLength: boolean }> {
-    const app = createApp({ store, rateLimit: false });
+    const app = createApp({ rateLimitSecret: SECRET, store, rateLimit: false });
     let sawLength = true;
     server = createServer(async (req, res) => {
       sawLength = req.headers["content-length"] !== undefined;

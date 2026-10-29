@@ -63,7 +63,7 @@ export function createRateLimiter(store: Store, config: RateLimitConfig, secret:
 export async function purgeRateLimits(store: Store, now: number = Date.now(), budget?: PurgeBudget): Promise<number> {
   const finished = (doc: Doc) => !validCounter(doc, now) || now - (doc.start as number) >= (doc.windowMs as number);
   return (
-    (await purgeOrdered(store, COLLECTION, "start", "asc", finished, budget)) +
-    (await purgeOrdered(store, COLLECTION, "start", "desc", (doc) => !validCounter(doc, now), budget))
+    (await purgeOrdered(store, COLLECTION, { orderBy: { field: "start" } }, finished, budget)) +
+    (await purgeOrdered(store, COLLECTION, { orderBy: { field: "start", direction: "desc" } }, (doc) => !validCounter(doc, now), budget))
   );
 }

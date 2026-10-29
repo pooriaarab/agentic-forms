@@ -52,9 +52,11 @@ const stillRetained = (retainUntil: unknown, now: number): boolean =>
 export async function purgeExpiredResponses(store: Store, now: number = Date.now(), budget?: PurgeBudget): Promise<number> {
   const notATime = (doc: Doc) => !(typeof doc.retainUntil === "string" && ISO_TIME.test(doc.retainUntil) && Number.isFinite(Date.parse(doc.retainUntil)));
   return (
-    (await purgeOrdered(store, COLLECTION, "retainUntil", "asc", (doc) => !stillRetained(doc.retainUntil, now), budget)) +
+    (await purgeOrdered(store, COLLECTION, { orderBy: { field: "retainUntil" } }, (doc) => !stillRetained(doc.retainUntil, now), budget)) +
     // Text that is not a time sorts last, so read from that end too.
-    (await purgeOrdered(store, COLLECTION, "retainUntil", "desc", notATime, budget))
+    (await purgeOrdered(store, COLLECTION, { orderBy: { field: "retainUntil", direction: "desc" } }, notATime, budget)) +
+    // An ordered read never reaches a null date.
+    (await purgeOrdered(store, COLLECTION, { where: { retainUntil: null } }, () => true, budget))
   );
 }
 

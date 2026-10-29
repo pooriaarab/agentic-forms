@@ -85,7 +85,7 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 - The CLI and MCP server keep data in one JSON file. It is safe for several processes, and it is not a database. Each read loads the whole file, so keep it to small data sets. A file in an older format fails with a clear error.
 - Import `createMemoryStore` and the `Store` types from `agentic-identity`. This package does not re-export them.
 - The fill page needs JavaScript and does not show file questions.
-- The Worker deletes expired responses once an hour (a Cron Trigger). The CLI does not schedule: run `purge-all` yourself. Each run reads a bounded number of pages, so a big backlog clears over several runs.
+- The Worker deletes expired responses once an hour (a Cron Trigger). The CLI does not schedule: run `purge-all` yourself. Each run reads at most 10 pages per pass, so a big backlog clears over several runs and a run stays inside the Workers Free limit of D1 calls. The ordered read has no index: a very large `responses` collection makes each page read slow.
 - Set two Worker secrets: `wrangler secret put FORMS_RATE_SECRET` (32 bytes or more, it keys the hash of client addresses) and `FORMS_API_TOKEN`. Without the rate secret the Worker refuses requests. A client with no address header shares one counter.
 - No sharing, roles, or sign-in yet. The API uses one shared token.
 - The page test runs the page script in jsdom, not in a real browser.

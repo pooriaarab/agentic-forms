@@ -31,6 +31,14 @@ describe("global response purge failures", () => {
     expect(await ids(store)).toEqual(["live"]);
   });
 
+  test("a null date is deleted too, since an ordered read never reaches it", async () => {
+    const store = createMemoryStore();
+    await store.put("responses", "null-date", row(null));
+    await store.put("responses", "live", row(iso(3)));
+    expect(await purgeExpiredResponses(store, NOW)).toBe(1);
+    expect(await ids(store)).toEqual(["live"]);
+  });
+
   test("many live rows cost one page read, so they cannot block the purge", async () => {
     const store = createMemoryStore();
     await store.put("responses", "old", row(iso(-1), "z"));
@@ -38,7 +46,7 @@ describe("global response purge failures", () => {
     let reads = 0;
     const counting = { ...store, transaction: ((fn: never) => (reads++, store.transaction(fn))) as typeof store.transaction };
     expect(await purgeExpiredResponses(counting as typeof store, NOW, { pages: 5, size: 10 })).toBe(1);
-    expect(reads).toBeLessThanOrEqual(4);
+    expect(reads).toBeLessThanOrEqual(5);
   });
 
   test("a backlog bigger than the budget is cleared over several runs, and each run stays inside the budget", async () => {

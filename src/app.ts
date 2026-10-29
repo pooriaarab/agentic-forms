@@ -315,7 +315,10 @@ export function createApp(options: AppOptions = {}) {
     if (page instanceof Response) return page;
     const listed = await sharing.listInvites(c.get("ctx"), c.req.param("id"), page);
     // An invite made by agentic-identity may carry commenter, which this API does not make but the library honors: list it. Owner and unknown roles are refused by the library, so they are not listed.
-    return c.json({ ...listed, invites: listed.invites.filter((invite) => LISTED_ROLES.has(invite.role)) });
+    // The summary leaves out an expiry that is not a number, so it would look like "never". The library refuses such an invite, so read the row and leave it out.
+    const rows = await Promise.all(listed.invites.map((invite) => store.get("invites", invite.id)));
+    const invites = listed.invites.filter((invite, at) => LISTED_ROLES.has(invite.role) && (rows[at]?.expiresAt === undefined || (typeof rows[at]?.expiresAt === "number" && Number.isFinite(rows[at]?.expiresAt))));
+    return c.json({ ...listed, invites });
   });
   // The token shows once, in this reply. Only its hash is stored.
   app.post(`${forms}/:id/links`, async (c) => {

@@ -51,6 +51,7 @@ describe("invites", () => {
   test("an invite row that grants a role no invite can give is not listed", async () => {
     await store.put("invites", "odd", { id: "odd", resourceId: "a", role: "owner", handle: "helper" });
     await store.put("invites", "fine", { id: "fine", resourceId: "a", role: "viewer", handle: "helper" });
+    await store.put("invites", "stale", { id: "stale", resourceId: "a", role: "viewer", handle: "helper", expiresAt: "2026-11-01" });
     await store.put("invites", "soft", { id: "soft", resourceId: "a", role: "commenter", handle: "helper" });
     expect((await json(await call(olga, "GET", "/a/invites"))).invites.map((i: { id: string }) => i.id).sort()).toEqual(["fine", "soft"]);
   });

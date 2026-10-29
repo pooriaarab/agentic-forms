@@ -4,10 +4,19 @@ This file lists what changed in each release. The versions follow semver. The AP
 
 ## Unreleased
 
-Breaking for the Worker and the SDK: the shared `FORMS_API_TOKEN` is removed. Identity credentials are the only way in.
+Breaking for the Worker, the SDK and the CLI data file.
+
+### Worker and SDK
 
 - The Worker no longer checks `FORMS_API_TOKEN`. It ignores the variable, logs a warning when it is set, and answers 401 to a caller that sends the old token. Follow "Migrate off FORMS_API_TOKEN" in the README.
 - Remove `createTokenAuth` from the package exports. Pass an `Auth` adapter of `agentic-identity` to `createApp` instead.
+
+### CLI data file
+
+- Use `agentic-identity/file` for the file store and delete the local copy. `createFileStore(path, options)` keeps its call. It runs a call again when another process wrote the file first.
+- The data file has a new format. A file written by an earlier version is refused with "not an agentic-identity store file" and is not changed. Version 0.5.0 is the last one that reads it. Nothing is migrated: forms, shares and responses stay in the old file. Export them with 0.5.0 before you upgrade.
+- The store of agentic-identity takes over a lock older than 3 seconds and does not check that its owner is alive. A very slow write can lose a concurrent one. Report it upstream.
+- `FileStoreOptions` (`staleMs`, `waitMs`) is gone.
 
 ## 0.5.0 - 2026-10-29
 

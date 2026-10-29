@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { createFileStore } from "../src/core/file-store.js";
+import { createFileStore } from "../src/core/retry-store.js";
 
 const data = join(mkdtempSync(join(tmpdir(), "forms-cli-")), "data.json");
 const cli = (args: string[], input?: string) => {

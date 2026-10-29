@@ -49,10 +49,22 @@ npx agentic-forms from-prompt --spec spec.json --publish   # an agent writes the
 npx agentic-forms mcp                                      # MCP tools on stdio
 ```
 
-The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it).
+The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it). The file uses the store format of agentic-identity. A file written by 0.5.0 or earlier is refused and not migrated.
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.
 
 The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: Bearer <token>`).
+To run the Worker from your own Wrangler project, re-export its entry from `agentic-forms/worker`:
+`export { default } from "agentic-forms/worker";`. The entry has a `fetch` handler and a `scheduled`
+handler for the purge job. Your Wrangler config needs these:
+
+- A D1 database bound as `DB`, created in the EU.
+- The variable `FORMS_REGION`, set to `eu` for that database. Without it, every request fails. A region that does not match the database also fails.
+- A Cron Trigger in `triggers.crons`. Without it, expired responses are never purged.
+- The secret `FORMS_RATE_SECRET`, 32 bytes or more. Without it, the Worker refuses requests.
+
+Make a credential in the store before you call `/api/v1` (see below). See `wrangler.jsonc` in this repo for an example. The web UI is not in
+the package, so `/ui/` answers 404 in this setup.
+
 In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`.
 The Worker accepts one kind of credential: a credential kept in the store, made with `issueCredential` from agentic-identity. It survives a restart. Write a principal with `store.put("principals", id, { id, kind: "human", scopes: ["*:admin"] })`, then call `issueCredential(store, { principalId: id, kind: "api_key" })`. It returns the bearer token once. Only the bearer header counts, not a cookie. A call with no credential or a wrong one answers 401. A valid credential without the right scope or role answers 403. If the store cannot be read, the call answers 503.
 
@@ -186,7 +198,7 @@ the token. The share link of a form points at `baseUrl`. The pages follow the ad
 - Versions: `publish` freezes a version. Editing a published form starts a new
   draft. Old responses stay readable against their own version.
 - `exportCsv` writes every response as CSV. It makes formula cells inert.
-- Agent tools: nine MCP tools and one CLI command each for make, extend, publish, submit, list, export, and purge.
+- Agent tools: ten MCP tools and one CLI command each for make, extend, publish, submit, list, export, and purge.
 - Access: every `/api/v1` route names the caller, and `can()` of `agentic-identity` decides it. The creator owns the form. Roles are owner, editor, and viewer. A viewer reads the form. An editor also edits, publishes, and reads answers. Only an owner shares, purges, deletes the form, and reads the audit log. A share names a kind, `human` or `agent`, because a person and an agent with the same id hold separate roles. Revoking with `DELETE .../shares/<subject>` needs `?kind=` too. Grants made before kinds are not honored until an admin runs `POST /api/v1/migrate-grants`: run it right after you deploy, and read `unresolved` in its answer. `backfill-owners` always makes the owner a person. A delegated agent keeps only the scopes it got. Each check is audited.
 - Storage runs on the `Store` port of `agentic-identity`. The Worker uses D1, the
   CLI uses a locked JSON file, and tests use the memory adapter.

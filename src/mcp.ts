@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z, ZodError } from "zod";
 import { FormError } from "./core/repo.js";
-import { createMemoryStore, type Store } from "./core/store.js";
+import { createMemoryStore, type Store } from "agentic-identity";
 import { SubmitError } from "./core/responses.js";
 import { formSpecSchema, questionSchema } from "./core/schema.js";
 import { OpsError, createOps } from "./ops.js";

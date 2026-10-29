@@ -1,6 +1,6 @@
 import { validateAnswers, type Answers, type Form, type Issue } from "./form.js";
 import type { FormRepo } from "./repo.js";
-import type { Doc, Store } from "./store.js";
+import type { Doc, Store } from "agentic-identity";
 
 const COLLECTION = "responses";
 

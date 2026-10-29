@@ -1,6 +1,9 @@
 // Runs the Worker under `wrangler dev`, drives /api/v1 over HTTP, then fills in the
 // public page with jsdom (it runs the page's own script) and reads the row back.
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
@@ -12,9 +15,9 @@ const running: ChildProcess[] = [];
 
 // Starts `wrangler dev` and waits until it answers any request. A Worker that
 // refuses to start answers 500, so readiness is "any HTTP status".
-async function start(port: number, token?: string): Promise<void> {
-  const vars = token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`];
-  const proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(port), ...vars], {
+async function start(port: number, token?: string, options: { persist?: string; vars?: string[] } = {}): Promise<ChildProcess> {
+  const vars = [...(token === undefined ? [] : ["--var", `FORMS_API_TOKEN:${token}`]), ...(options.vars ?? []).flatMap((v) => ["--var", v])];
+  const proc = spawn("node_modules/.bin/wrangler", ["dev", "--local", "--ip", "127.0.0.1", "--port", String(port), "--persist-to", options.persist ?? mkdtempSync(join(tmpdir(), "forms-d1-")), ...vars], {
     env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
   });
   running.push(proc);
@@ -25,7 +28,7 @@ async function start(port: number, token?: string): Promise<void> {
   for (;;) {
     try {
       await fetch(`http://127.0.0.1:${port}/health`);
-      return;
+      return proc;
     } catch {}
     if (Date.now() > deadline) throw new Error(`wrangler dev did not start:\n${log.slice(-1500)}`);
     await new Promise((r) => setTimeout(r, 500));
@@ -83,6 +86,29 @@ describe("secret failures", () => {
     await start(8802, "b".repeat(32));
     const res = await fetch("http://127.0.0.1:8802/api/v1/forms", { headers: { authorization: `Bearer ${"b".repeat(32)}` } });
     expect(res.status).toBe(200);
+  });
+});
+
+describe("durable storage", () => {
+  const stop = (proc: ChildProcess) => new Promise((resolve) => (proc.once("exit", resolve), proc.kill()));
+
+  test("a form and its rows survive a Worker restart", async () => {
+    const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
+    const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
+    const first = await start(8803, TOKEN, { persist });
+    const open = { id: "keep", title: "Keep", publish: true, sections: [{ id: "s", title: "S", questions: [{ id: "n", type: "short_text", label: "N", required: true }] }] };
+    expect((await fetch("http://127.0.0.1:8803/api/v1/forms", { method: "POST", headers, body: JSON.stringify(open) })).status).toBe(201);
+    expect((await fetch("http://127.0.0.1:8803/f/keep", { method: "POST", headers, body: JSON.stringify({ answers: { n: "kept" } }) })).status).toBe(201);
+    await stop(first);
+
+    await start(8804, TOKEN, { persist });
+    const rows = await (await fetch("http://127.0.0.1:8804/api/v1/forms/keep/responses", { headers })).json();
+    expect(rows.items.map((r: { values: { n: string } }) => r.values.n)).toEqual(["kept"]);
+  });
+
+  test("a region that is not eu or us makes the Worker refuse to serve", async () => {
+    await start(8805, TOKEN, { vars: ["FORMS_REGION:mars"] });
+    expect((await fetch("http://127.0.0.1:8805/health")).status).toBe(500);
   });
 });
 

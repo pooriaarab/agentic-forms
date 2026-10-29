@@ -1,5 +1,5 @@
 import { validateForPublish, validateForm, type Form, type Issue } from "./form.js";
-import type { Doc, Store } from "./store.js";
+import type { Doc, Store } from "agentic-identity";
 
 const HEADS = "forms";
 const VERSIONS = "form_versions";

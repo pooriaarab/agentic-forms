@@ -68,7 +68,8 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
   draft. Old responses stay readable against their own version.
 - `exportCsv` writes every response as CSV. It makes formula cells inert.
 - Agent tools: eight MCP tools and one CLI command each for make, extend, publish, submit, list, export, and purge.
-- A `Store` interface with the same shape as the agentic-identity port.
+- Storage runs on the `Store` port of `agentic-identity`. The Worker uses D1, the
+  CLI uses a locked JSON file, and tests use the memory adapter.
 
 - A public fill page at `/f/<form id>`, served by the Worker. One HTML file, system
   fonts, no CDN, no third-party script. A strict content security policy.
@@ -79,9 +80,11 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
 
 ## Limits
 
-- The only store is in memory. Data is lost on exit.
+- The Worker needs a D1 database. Create it in the EU: `wrangler d1 create agentic-forms --location weur`.
+  Put its id in `wrangler.jsonc` and keep `FORMS_REGION` at `eu`. The region is your claim, and D1 refuses a query that another region served.
+- The CLI and MCP server keep data in one JSON file. It is safe for several processes, and it is not a database.
 - The fill page needs JavaScript and does not show file questions.
-- The rate limit and the Worker store live in one isolate's memory.
+- The rate limit lives in one isolate's memory.
 - You must call `purgeExpired` yourself. Nothing schedules it yet.
 - No sharing, roles, or sign-in yet. The API uses one shared token.
 - The page test runs the page script in jsdom, not in a real browser.

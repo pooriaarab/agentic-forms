@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { ZodError } from "zod";
 import { SubmitError } from "./core/responses.js";
 import { FormError } from "./core/repo.js";
-import { createMemoryStore, type Store } from "./core/store.js";
+import { createMemoryStore, type Store } from "agentic-identity";
 import { OpsError, createOps } from "./ops.js";
 import { renderFillPage } from "./page.js";
 import { VERSION } from "./version.js";

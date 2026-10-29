@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "agentic-identity": "^0.1.0",
     "hono": "^4.13.14",
     "re2js": "^2.9.1",
     "zod": "^3.25.0"

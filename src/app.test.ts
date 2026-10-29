@@ -8,7 +8,7 @@ import { createApp } from "./app.js";
 import type { Form } from "./core/form.js";
 import { createFormRepo } from "./core/repo.js";
 import { createResponses } from "./core/responses.js";
-import { createMemoryStore } from "./core/store.js";
+import { createMemoryStore } from "agentic-identity";
 
 const evil = `<img src=x onerror=alert(1)>"`;
 const base = (extra: Partial<Form> = {}): Form => ({

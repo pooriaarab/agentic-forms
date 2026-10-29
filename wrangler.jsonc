@@ -1,5 +1,11 @@
 {
   "name": "agentic-forms",
   "main": "src/worker.ts",
-  "compatibility_date": "2026-01-01"
+  "compatibility_date": "2026-01-01",
+  // agentic-identity reads its version through node:module.
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "FORMS_REGION": "eu" },
+  // Create the database in the EU, then paste its id below:
+  //   wrangler d1 create agentic-forms --location weur
+  "d1_databases": [{ "binding": "DB", "database_name": "agentic-forms", "database_id": "00000000-0000-0000-0000-000000000000" }]
 }

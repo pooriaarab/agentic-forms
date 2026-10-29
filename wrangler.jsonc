@@ -4,6 +4,8 @@
   "compatibility_date": "2026-01-01",
   // Hard-delete responses past their retention date, every 10 minutes.
   "triggers": { "crons": ["7,17,27,37,47,57 * * * *"] },
+  // The web UI, built by `npm run build:ui`. Static files are served before the Worker runs.
+  "assets": { "directory": "./public" },
   "vars": { "FORMS_REGION": "eu" },
   // Create the database in the EU, then paste its id below:
   //   wrangler d1 create agentic-forms --location weur

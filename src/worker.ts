@@ -46,7 +46,7 @@ const database = (env: WorkerEnv) => (storing ??= forget(openStore(env), () => (
 // The app is separate, so a bad API token or rate secret stops requests and not the purge job.
 const app = (env: WorkerEnv) =>
   (serving ??= forget(
-    database(env).then(({ store }) => createApp({ store, auth: durableAuth(store, env), rateLimitSecret: env.FORMS_RATE_SECRET })),
+    database(env).then(({ store }) => createApp({ store, auth: durableAuth(store, env), rateLimitSecret: env.FORMS_RATE_SECRET, ui: true })),
     () => (serving = undefined),
   ));
 

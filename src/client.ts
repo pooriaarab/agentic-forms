@@ -127,8 +127,9 @@ export function createClient(options: ClientOptions) {
     /** POST /api/v1/forms/:id/questions. On a published form this starts a new draft version. */
     addQuestion: (formId: string, question: QuestionInput, addOptions: { section?: string } & CallOptions = {}) =>
       json<Form>("POST", `${form(formId)}/questions`, { signal: addOptions.signal, body: { question, section: addOptions.section } }),
-    /** POST /api/v1/forms/:id/publish. */
-    publishForm: (formId: string, call: CallOptions = {}) => json<Form>("POST", `${form(formId)}/publish`, { signal: call.signal }),
+    /** POST /api/v1/forms/:id/publish. Pass `expectedRevision` (from `form.revision ?? 0`) to refuse a draft that changed since you read it (409 `version_conflict`). */
+    publishForm: (formId: string, publishOptions: { expectedRevision?: number } & CallOptions = {}) =>
+      json<Form>("POST", `${form(formId)}/publish`, { signal: publishOptions.signal, body: publishOptions.expectedRevision === undefined ? undefined : { expectedRevision: publishOptions.expectedRevision } }),
     /** GET /api/v1/forms/:id/responses. One page, oldest first. Pass `nextCursor` back as `cursor`. */
     listResponses: (formId: string, query: { limit?: number; cursor?: string } = {}, call: CallOptions = {}) =>
       json<Page<FormResponse>>("GET", `${form(formId)}/responses`, { signal: call.signal, query }),

@@ -1,0 +1,5 @@
+# 'unsafe-inline' for styles only: the dialog and menu parts of the design package set style attributes. No inline script is allowed.
+/ui/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer

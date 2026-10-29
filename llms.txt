@@ -5,6 +5,7 @@ Build forms and collect answers into tables.
 Keywords: forms,surveys,responses,agents,mcp,cli,tables,collaboration.
 
 - SDK: import { createOps, createFileStore } from "agentic-forms".
+- Web UI: the Worker serves /ui/ (build it with npm run build:ui). It signs in with an API token, builds forms, previews, publishes, and reads responses. Every UI action also exists in the SDK, CLI, MCP, and HTTP API.
 - Remote SDK: import { createClient, ApiError } from "agentic-forms/client"; createClient({ baseUrl, token, fetch? }) has one method per /api/v1 route plus the public submit. A refused call throws ApiError with status and code. Methods take { signal } last. No retries. It runs in browsers, Workers, and Node 22.
 - CLI: agentic-forms --help.
 - MCP: run agentic-forms mcp, then call new_form.

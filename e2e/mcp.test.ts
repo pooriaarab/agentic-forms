@@ -52,6 +52,7 @@ describe("mcp over stdio", () => {
     expect(stale.error).toBe(true);
     expect(stale.text).toContain("changed since revision");
     expect(JSON.parse(edited.text).sections[0].questions.map((q: { id: string; madeBy: string }) => `${q.id}:${q.madeBy}`)).toEqual(["mood:agent", "name:agent"]);
+    expect((await call("publish_form", { form: "survey", expectedRevision: 0 })).text).toContain("before you publish");
     expect((await call("publish_form", { form: "survey" })).error).toBe(false);
     expect((await call("submit_response", { form: "survey", answers: { name: "Ada" } })).text).toContain("consent");
     expect((await call("submit_response", { form: "survey", answers: { name: "Ada", mood: 4 }, consent: true })).error).toBe(false);

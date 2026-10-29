@@ -48,7 +48,8 @@ describe("remote client against the Worker", () => {
     expect(edited.sections[0]!.questions.map((q) => q.id)).toEqual(["note", "color"]);
     expect(edited.sections[0]!.questions.map((q) => q.madeBy)).toEqual(["agent", "agent"]);
     expect(await caught(api.updateForm("poll", { title: "x", sections: edited.sections, expectedVersion: 7 }))).toMatchObject({ status: 409, code: "version_conflict" });
-    expect((await api.publishForm("poll")).status).toBe("published");
+    expect(await caught(api.publishForm("poll", { expectedRevision: 0 }))).toMatchObject({ status: 409, code: "version_conflict", body: { counts: "revision" } });
+    expect((await api.publishForm("poll", { expectedRevision: edited.revision })).status).toBe("published");
     expect((await api.getForm("poll")).sections[0]!.questions.map((q) => q.id)).toEqual(["note", "color"]);
     expect((await api.listForms()).map((f) => f.id)).toEqual(["poll"]);
 

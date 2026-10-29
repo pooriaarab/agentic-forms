@@ -79,10 +79,14 @@ export function createFormRepo(store: Store) {
       });
     },
     /** Freezes the head as a new published version. Throws SnapshotExistsError rather than replace one. */
-    async publish(id: string): Promise<Form> {
+    async publish(id: string, options: { expectedRevision?: number } = {}): Promise<Form> {
       return store.transaction(async (tx) => {
         const head = (await tx.get(HEADS, id)) as unknown as Form | null;
         if (!head) throw new Error(`form "${id}" not found`);
+        const { expectedRevision } = options;
+        if (expectedRevision !== undefined && (head.revision ?? 0) !== expectedRevision) {
+          throw new VersionConflictError(id, expectedRevision, head.revision ?? 0, `form "${id}" changed since revision ${expectedRevision}: read it again before you publish`, "revision");
+        }
         if (head.status === "published") throw new Error(`form "${id}" is already published`);
         const issues = validateForPublish(head);
         if (issues.length > 0) throw new FormError(issues);

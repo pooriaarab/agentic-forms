@@ -1,5 +1,5 @@
 // The public fill page: one self-contained HTML document. No CDN, no third-party
-// script, system fonts only. Built for WCAG 2.2 AA: labels on every control,
+// script. The look comes from the agentic-design tokens, which the Worker serves at /ui/styles.css (self-hosted fonts); system fonts remain the fallback. Built for WCAG 2.2 AA: labels on every control,
 // visible focus, 44px targets, a text error summary, and no color-only cues.
 import type { Form, Question } from "./core/form.js";
 
@@ -7,18 +7,18 @@ const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;"
 const esc = (text: string): string => text.replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
 const STYLE = `
-body{margin:0;font:1.125rem/1.6 system-ui,sans-serif;color:#1a1a1a;background:#fff}
+body{margin:0;font:var(--ad-font-size-lg,1.125rem)/1.6 var(--ad-font-family-sans,system-ui,sans-serif);color:var(--ad-color-text,#1a1a1a);background:var(--ad-color-bg,#fff)}
 main{max-width:40rem;margin:0 auto;padding:1.5rem 1rem 4rem}
-fieldset{border:1px solid #595959;padding:1rem;margin:0 0 1.5rem}
+fieldset{border:1px solid var(--ad-color-border-strong,#595959);border-radius:var(--ad-radius-md,4px);padding:1rem;margin:0 0 1.5rem}
 legend{font-weight:600;padding:0 .25rem}
 label{display:block;font-weight:600;margin:.75rem 0 .25rem}
 .opt{display:flex;gap:.5rem;align-items:center;min-height:44px}
 .opt label{margin:0;font-weight:400}
-input[type=checkbox],input[type=radio]{width:1.5rem;height:1.5rem;flex:none}
-input:not([type=checkbox]):not([type=radio]),textarea,select{width:100%;box-sizing:border-box;min-height:44px;padding:.5rem;font:inherit;border:2px solid #595959;border-radius:4px}
-:focus-visible{outline:3px solid #0b57d0;outline-offset:2px}
-button{min-height:44px;padding:.5rem 1.5rem;font:inherit;font-weight:600;color:#fff;background:#0b57d0;border:2px solid #0b57d0;border-radius:4px;cursor:pointer}
-#errors{border:3px solid #b3261e;padding:1rem;margin:0 0 1.5rem}
+input[type=checkbox],input[type=radio]{width:1.5rem;height:1.5rem;flex:none;accent-color:var(--ad-color-accent,#0b57d0)}
+input:not([type=checkbox]):not([type=radio]),textarea,select{width:100%;box-sizing:border-box;min-height:44px;padding:.5rem;font:inherit;color:inherit;background:var(--ad-color-surface,#fff);border:2px solid var(--ad-color-border-strong,#595959);border-radius:var(--ad-radius-sm,4px)}
+:focus-visible{outline:3px solid var(--ad-color-focus,#0b57d0);outline-offset:2px}
+button{min-height:44px;padding:.5rem 1.5rem;font:inherit;font-weight:600;color:var(--ad-color-text-on-accent,#fff);background:var(--ad-color-accent,#0b57d0);border:2px solid var(--ad-color-accent,#0b57d0);border-radius:var(--ad-radius-sm,4px);cursor:pointer}
+#errors{border:3px solid var(--ad-color-danger,#b3261e);padding:1rem;margin:0 0 1.5rem}
 .req{font-weight:400}
 .notice{white-space:pre-line}
 [hidden]{display:none!important}`;
@@ -111,6 +111,8 @@ export function renderFillPage(form: Form, nonce: string): string {
       : `<section aria-labelledby="notice-h"><h2 id="notice-h">Privacy notice</h2><p class="notice">${esc(form.notice)}</p>${
           form.retentionDays ? `<p>We keep your answers for ${form.retentionDays} days.</p>` : ""
         }<div class="opt"><input id="consent" name="consent" type="checkbox" required aria-required="true"><label for="consent">I have read the notice and agree <span class="req">(required)</span></label></div></section>`;
-  const data = JSON.stringify({ sections: form.sections }).replace(/</g, "\\u003c");
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(form.title)}</title><style nonce="${nonce}">${STYLE}</style></head><body><main><h1>${esc(form.title)}</h1><div id="done" role="status" tabindex="-1" hidden><h2>Thank you</h2><p>We received your answers.</p></div><form id="form"><div id="errors" role="alert" tabindex="-1" hidden></div>${sections}${notice}<p><button type="submit">Send</button></p></form></main><script type="application/json" id="form-data" nonce="${nonce}">${data}</script><script nonce="${nonce}">${SCRIPT}</script></body></html>`;
+  // madeBy is an editing detail: the page data leaves it out.
+  const plain = form.sections.map((s) => ({ ...s, questions: s.questions.map(({ madeBy: _by, ...q }) => q) }));
+  const data = JSON.stringify({ sections: plain }).replace(/</g, "\\u003c");
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(form.title)}</title><link rel="stylesheet" href="/ui/styles.css"><style nonce="${nonce}">${STYLE}</style></head><body><main><h1>${esc(form.title)}</h1><div id="done" role="status" tabindex="-1" hidden><h2>Thank you</h2><p>We received your answers.</p></div><form id="form"><div id="errors" role="alert" tabindex="-1" hidden></div>${sections}${notice}<p><button type="submit">Send</button></p></form></main><script type="application/json" id="form-data" nonce="${nonce}">${data}</script><script nonce="${nonce}">${SCRIPT}</script></body></html>`;
 }

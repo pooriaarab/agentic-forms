@@ -8,6 +8,11 @@ import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
+// Every request closes its connection. A kept-alive socket sits idle while a test
+// blocks (a wrangler d1 call, a Worker restart). The server then closes it, and the
+// next request reuses it and fails with "other side closed".
+const fetch = (url: string | URL, init: RequestInit = {}) => globalThis.fetch(url, { ...init, headers: { connection: "close", ...(init.headers as Record<string, string> | undefined) } });
+
 const TOKEN = "e2e-token-0123456789-0123456789-abcdef"; // 40 bytes
 const RATE_SECRET = "e2e-rate-secret-0123456789-0123456789"; // 38 bytes
 const PORT = 8799;

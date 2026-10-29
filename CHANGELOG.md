@@ -6,7 +6,7 @@ This file lists what changed in each release. The versions follow semver. The AP
 
 Breaking changes. Read these before you upgrade from 0.7.0:
 
-- BREAKING: design class prefix is now agd-. The `/ui` output uses `agd-` for every CSS class and `--agd-*` for every custom property. The old prefix is gone, with no alias. Ad blockers hide the old names, so a block rule could remove a button. A stylesheet or test that targets an old name must change. `agentic-design` is now 0.4.x, the release that ships the `agd-` names.
+- BREAKING: design class prefix is now agd-. Design classes use `agd-`, and design custom properties use `--agd-*`, in the `/ui` app and on the public form page at `/f/<id>`. The old prefix is gone, with no alias. Ad blockers hide the old names, so a block rule could remove a button. A stylesheet or test that targets an old name must change. `agentic-design` is now 0.4.x, the release that ships the `agd-` names.
 
 ## 0.7.0 - 2026-10-29
 

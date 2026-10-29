@@ -3,8 +3,10 @@
 import { z } from "zod";
 
 const id = z.string().min(1).max(100);
-// A form id is also a sharing resource id, so it holds only letters, digits, "-" and "_".
-const formId = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
+// A form id is also a store id and a sharing resource id, so it holds only letters, digits, "-" and "_".
+// The store keeps ids of the form __name__ for itself.
+export const FORM_ID = /^(?!__.*__$)[A-Za-z0-9_-]{1,100}$/;
+const formId = z.string().regex(FORM_ID);
 const condition = z
   .object({
     question: id,

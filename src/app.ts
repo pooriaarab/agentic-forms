@@ -1,15 +1,30 @@
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
 import { ZodError } from "zod";
 import { SubmitError } from "./core/responses.js";
 import { FormError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
 import { ROLES, createMemoryStore, createSharing, hasScope, type Action, type Auth, type PrincipalContext, type Role, type Store } from "agentic-identity";
 import { clientKey, createRateLimiter } from "./core/rate-limit.js";
+import { FORM_ID } from "./core/schema.js";
 import { OpsError, createOps } from "./ops.js";
 import { renderFillPage } from "./page.js";
 import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
+const SUBJECT = /^[A-Za-z0-9_-]{1,128}$/;
+const MAX_LIMIT = 1000;
+
+/** A cursor is base64url of JSON [value, id]. Stores differ in what they do with a crafted one, so check the shape here. */
+function wellFormedCursor(cursor: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(atob(cursor.replace(/-/g, "+").replace(/_/g, "/")));
+    if (!Array.isArray(parsed) || parsed.length !== 2) return false;
+    const [value, id] = parsed;
+    return typeof id === "string" && (value === null || ["string", "number", "boolean"].includes(typeof value));
+  } catch {
+    return false;
+  }
+}
 const SHARE_ROLES: readonly Role[] = ["owner", "editor", "viewer"];
 
 /** The caller may not do this. A caller with no role on the form gets 404, so a form id never leaks. */
@@ -50,6 +65,9 @@ export function createApp(options: AppOptions = {}) {
 
   const app = new Hono<{ Variables: { ctx: PrincipalContext } }>();
   app.get("/health", (c) => c.json({ ok: true, version: VERSION }));
+
+  // A malformed id never reaches the store, which would throw on it.
+  app.use("/f/:id", async (c, next) => (FORM_ID.test(c.req.param("id")) ? next() : c.text("This form id is not valid.", 400)));
 
   app.get("/f/:id", async (c) => {
     const form = await repo.getPublished(c.req.param("id"));
@@ -105,6 +123,9 @@ export function createApp(options: AppOptions = {}) {
     if (!decision.allowed) throw new AccessError(decision.role === undefined && hasScope(ctx.scopes, `form:${action}`) ? 404 : 403);
   };
   const forms = "/api/v1/forms";
+  const checkId = async (c: Context, next: Next) => (FORM_ID.test(c.req.param("id") ?? "") ? next() : c.json({ error: "invalid_id" }, 400));
+  app.use(`${forms}/:id`, checkId);
+  app.use(`${forms}/:id/*`, checkId);
   app.post(forms, async (c) => {
     const ctx = c.get("ctx");
     if (!hasScope(ctx.scopes, "form:write")) throw new AccessError(403);
@@ -161,8 +182,14 @@ export function createApp(options: AppOptions = {}) {
   // Answers hold personal data, so reading them needs an editor.
   app.get(`${forms}/:id/responses`, async (c) => {
     await require(c, "write", c.req.param("id"));
-    const limit = c.req.query("limit");
-    return c.json(await ops.listResponses(c.req.param("id"), { limit: limit ? Number(limit) : undefined, cursor: c.req.query("cursor") }));
+    const raw = c.req.query("limit");
+    const limit = raw === undefined ? undefined : Number(raw);
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT)) {
+      return c.json({ error: "invalid_query", message: `limit is a whole number from 1 to ${MAX_LIMIT}` }, 400);
+    }
+    const cursor = c.req.query("cursor");
+    if (cursor !== undefined && !wellFormedCursor(cursor)) return c.json({ error: "invalid_query", message: "the cursor is not valid" }, 400);
+    return c.json(await ops.listResponses(c.req.param("id"), { limit, cursor }));
   });
   app.get(`${forms}/:id/export`, async (c) => {
     await require(c, "write", c.req.param("id"));
@@ -175,7 +202,7 @@ export function createApp(options: AppOptions = {}) {
   app.post(`${forms}/:id/shares`, async (c) => {
     await require(c, "admin", c.req.param("id"));
     const { subject, role } = await c.req.json();
-    if (typeof subject !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(subject) || !SHARE_ROLES.includes(role as Role)) {
+    if (typeof subject !== "string" || !SUBJECT.test(subject) || !SHARE_ROLES.includes(role as Role)) {
       return c.json({ error: "invalid_share", message: `give a subject of letters, digits, "-" and "_", and a role of ${SHARE_ROLES.join(", ")}` }, 400);
     }
     // identity's grant() does not guard the last owner, so check here. Two owners demoted at the same moment can still pass.
@@ -188,6 +215,7 @@ export function createApp(options: AppOptions = {}) {
   });
   app.delete(`${forms}/:id/shares/:subject`, async (c) => {
     await require(c, "admin", c.req.param("id"));
+    if (!SUBJECT.test(c.req.param("subject"))) return c.json({ error: "invalid_share", message: "the subject is not valid" }, 400);
     try {
       await sharing.revokeGrant(c.get("ctx"), c.req.param("id"), c.req.param("subject"));
     } catch (error) {

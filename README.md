@@ -49,7 +49,7 @@ npx agentic-forms from-prompt --spec spec.json --publish   # an agent writes the
 npx agentic-forms mcp                                      # MCP tools on stdio
 ```
 
-The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it).
+The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it). The file uses the store format of agentic-identity. A file from before this change is refused.
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.
 
 The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: Bearer <token>`).

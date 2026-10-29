@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll } from "vitest";
-import { createFileStore } from "./file-store.js";
+import { createFileStore } from "./retry-store.js";
 
 const dir = mkdtempSync(join(tmpdir(), "forms-contract-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));

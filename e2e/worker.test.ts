@@ -1,6 +1,7 @@
 // Runs the Worker under `wrangler dev`, drives /api/v1 over HTTP, then fills in the
 // public page with jsdom (it runs the page's own script) and reads the row back.
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,7 @@ const PORT = 8799;
 const base = `http://127.0.0.1:${PORT}`;
 const auth = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
 const running: ChildProcess[] = [];
+const stop = (proc: ChildProcess) => new Promise((resolve) => (proc.once("exit", resolve), proc.kill()));
 
 // Starts `wrangler dev` and waits until it answers any request. A Worker that
 // refuses to start answers 500, so readiness is "any HTTP status".
@@ -65,15 +67,40 @@ describe("secret failures", () => {
     ["GET", "/api/v1/forms/x/export"],
   ];
 
-  test("a Worker with no token answers 503 on every /api/v1 route", async () => {
+  test("a Worker with no token answers 401 on every /api/v1 route", async () => {
     await start(8800);
     for (const [method, path] of routes) {
       for (const headers of [{}, { authorization: "Bearer anything" }, { authorization: "Bearer " }] as Record<string, string>[]) {
         const res = await fetch(`http://127.0.0.1:8800${path}`, { method, headers, body: method === "POST" ? "{}" : undefined });
-        expect(res.status, `${method} ${path}`).toBe(503);
+        expect(res.status, `${method} ${path}`).toBe(401);
       }
     }
     expect((await fetch("http://127.0.0.1:8800/health")).status).toBe(200);
+  });
+
+  test("a credential kept in the store works with no shared token, and after a restart", async () => {
+    const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
+    const sql = (command: string) =>
+      execFileSync("node_modules/.bin/wrangler", ["d1", "execute", "DB", "--local", "--persist-to", persist, "--json", "--command", command], {
+        encoding: "utf8",
+        env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" },
+      });
+    // Start once so the schema exists, then write a principal and a credential the way issueCredential does.
+    await stop(await start(8808, undefined, { persist }));
+    const token = "aid_e2e-store-credential-0123456789";
+    const hash = createHash("sha256").update(token).digest("hex");
+    const doc = (value: object) => JSON.stringify(value).replace(/'/g, "''");
+    sql(`INSERT INTO store_docs (collection, id, body, version) VALUES ('principals', 'ada', '${doc({ id: "ada", kind: "human", scopes: ["*:admin"] })}', 1), ('credentials', '${hash}', '${doc({ principalId: "ada", kind: "session" })}', 1)`);
+    const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+    const open = { id: "durable", title: "Durable", sections: [{ id: "s", title: "S", questions: [{ id: "n", type: "short_text", label: "N" }] }] };
+    const first = await start(8809, undefined, { persist });
+    expect((await fetch("http://127.0.0.1:8809/api/v1/forms", { method: "POST", headers, body: JSON.stringify(open) })).status).toBe(201);
+    await stop(first);
+
+    await start(8812, undefined, { persist });
+    const list = await (await fetch("http://127.0.0.1:8812/api/v1/forms", { headers })).json();
+    expect(list.forms.map((f: { id: string }) => f.id)).toEqual(["durable"]);
+    expect((await fetch("http://127.0.0.1:8812/api/v1/forms", { headers: { authorization: "Bearer aid_wrong" } })).status).toBe(401);
   });
 
   test("a token under 32 bytes makes the Worker refuse to serve", async () => {
@@ -92,8 +119,6 @@ describe("secret failures", () => {
 });
 
 describe("durable storage", () => {
-  const stop = (proc: ChildProcess) => new Promise((resolve) => (proc.once("exit", resolve), proc.kill()));
-
   test("a form and its rows survive a Worker restart", async () => {
     const persist = mkdtempSync(join(tmpdir(), "forms-d1-"));
     const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };

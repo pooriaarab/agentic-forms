@@ -30,3 +30,16 @@ export function createTokenAuth(token: string): Auth {
     },
   };
 }
+
+/** Tries each Auth in order. The first one that names a caller wins. */
+export function firstAuth(...auths: Auth[]): Auth {
+  return {
+    async authenticate(request) {
+      for (const auth of auths) {
+        const ctx = await auth.authenticate(request.clone());
+        if (ctx) return ctx;
+      }
+      return null;
+    },
+  };
+}

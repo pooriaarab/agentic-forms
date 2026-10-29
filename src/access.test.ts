@@ -1,6 +1,6 @@
 // Ways form access can fail, written before the code. They drive the real HTTP
 // handler with the real memory adapters of agentic-identity.
-import { createMemoryAuth, createMemoryStore, createSharing, type PrincipalContext } from "agentic-identity";
+import { createMemoryAuth, createMemoryStore, createSharing, createStoreAuth, issueCredential, type PrincipalContext } from "agentic-identity";
 import { beforeEach, describe, expect, test } from "vitest";
 import { createApp } from "./app.js";
 import { createFormRepo } from "./core/repo.js";
@@ -130,6 +130,21 @@ describe("owner and roles", () => {
     const names = async (token: string) => ((await (await call(token, "GET", "")).json()) as { forms: { id: string }[] }).forms.map((f) => f.id).sort();
     expect(await names(olga)).toEqual(["a", "b"]);
     expect(await names(sam)).toEqual(["b", "c"]);
+  });
+});
+
+describe("credentials kept in the store", () => {
+  test("a credential from issueCredential names the caller, and a revoked or unknown one does not", async () => {
+    const durable = createApp({ store, auth: createStoreAuth(store), rateLimitSecret: SECRET });
+    await store.put("principals", "ada", { id: "ada", kind: "human", scopes: ["*:admin"] });
+    const token = await issueCredential(store, { principalId: "ada", kind: "session" } as never);
+    const send = (bearer: string, method = "GET", body?: unknown) =>
+      durable.request("/api/v1/forms", { method, headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    expect((await send(token, "POST", spec("a"))).status).toBe(201);
+    expect(((await (await send(token)).json()) as { forms: { id: string }[] }).forms.map((f) => f.id)).toEqual(["a"]);
+    expect((await send("aid_unknown")).status).toBe(401);
+    await store.put("credentials", (await store.query("credentials")).items[0]!.id, { principalId: "ada", kind: "session", revokedAt: 1 });
+    expect((await send(token)).status).toBe(401);
   });
 });
 

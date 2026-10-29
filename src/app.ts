@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { SubmitError } from "./core/responses.js";
 import { FormError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
-import { ROLES, createMemoryStore, createSharing, hasScope, type Action, type Auth, type PrincipalContext, type Role, type Store } from "agentic-identity";
+import { createMemoryStore, createSharing, hasScope, type Action, type Auth, type PrincipalContext, type Role, type Store } from "agentic-identity";
 import { clientKey, createRateLimiter } from "./core/rate-limit.js";
 import { OpsError, createOps } from "./ops.js";
 import { renderFillPage } from "./page.js";
@@ -123,24 +123,17 @@ export function createApp(options: AppOptions = {}) {
     }
     return c.json(await ops.create(parsed, publish === true), 201);
   });
-  // Lists the forms the caller's grants name. It reads the grants of the root of the chain,
-  // so a list does not write one audit row per form. Scopes still narrow what an agent sees.
+  // Lists the forms the caller may read. Each form goes through sharing.can, so the roles, the
+  // folder rules and the scopes of the chain all apply. Each check writes an audit row.
   app.get(forms, async (c) => {
     const ctx = c.get("ctx");
-    const root = ctx.chain[0]?.id;
-    if (root === undefined || !hasScope(ctx.scopes, "form:read")) return c.json({ forms: [] });
+    if (!hasScope(ctx.scopes, "form:read")) return c.json({ forms: [] });
     const visible: Form[] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await store.query("grants", { where: { subjectId: root }, orderBy: { field: "resourceId" }, cursor });
-      for (const { data } of page.items) {
-        if (typeof data.resourceId !== "string" || !ROLES.includes(data.role as Role)) continue;
-        if ((await store.get("resources", data.resourceId))?.type !== "form") continue;
-        const form = await repo.get(data.resourceId);
-        if (form) visible.push(form);
-      }
-      cursor = page.nextCursor;
-    } while (cursor !== undefined);
+    for (const form of await repo.list()) {
+      const resource = await store.get("resources", form.id);
+      if (resource === null || resource.type !== "form") continue;
+      if ((await sharing.can(ctx, "read", form.id)).allowed) visible.push(form);
+    }
     return c.json({ forms: visible });
   });
   app.get(`${forms}/:id`, async (c) => {

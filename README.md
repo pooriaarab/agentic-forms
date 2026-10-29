@@ -53,7 +53,7 @@ The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` c
 
 The Worker serves `/f/<id>` (public) and `/api/v1/forms` (needs `Authorization: Bearer <token>`).
 In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. The Worker uses one shared token, which acts as one principal that owns every form it makes.
-Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs at least 32 bytes. With a shorter token the Worker refuses to serve. With no token the API answers 503.
+Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs at least 32 bytes. With a shorter token the Worker refuses to serve. The token is a bootstrap. The Worker also accepts credentials kept in the store (`issueCredential` from agentic-identity), and they survive a restart. With no token and no stored credential, every call answers 401.
 
 ## Features
 

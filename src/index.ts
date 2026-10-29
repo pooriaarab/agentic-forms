@@ -12,7 +12,7 @@ export type { Ops } from "./ops.js";
 export { formSpecSchema, formUpdateSchema, questionSchema } from "./core/schema.js";
 export type { FormSpec, QuestionSpec } from "./core/schema.js";
 export { createTokenAuth } from "./core/token-auth.js";
-export { createFileStore } from "./core/file-store.js";
+export { createFileStore } from "./core/retry-store.js";
 export { createMcpServer } from "./mcp.js";
 export { BackfillError, backfillOwners } from "./core/backfill.js";
 export type { BackfillResult } from "./core/backfill.js";

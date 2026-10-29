@@ -2,6 +2,15 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## Unreleased
+
+Breaking for the CLI data file. The file store is now the one in `agentic-identity/file`.
+
+- Use `agentic-identity/file` for the file store and delete the local copy. `createFileStore(path, options)` keeps its call. It runs a call again when another process wrote the file first.
+- The data file has a new format. A file written by an earlier version is refused with "not an agentic-identity store file" and is not changed. Version 0.5.0 is the last one that reads it. Nothing is migrated: forms, shares and responses stay in the old file. Export them with 0.5.0 before you upgrade.
+- The store of agentic-identity takes over a lock older than 3 seconds and does not check that its owner is alive. A very slow write can lose a concurrent one. Report it upstream.
+- `FileStoreOptions` (`staleMs`, `waitMs`) is gone.
+
 ## 0.5.0 - 2026-10-29
 
 No breaking changes. `agentic-design` moves from a dev dependency to a runtime dependency.

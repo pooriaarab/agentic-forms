@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { createFileStore } from "../src/core/file-store.js";
+import { createFileStore } from "../src/core/retry-store.js";
 
 const dir = () => mkdtempSync(join(tmpdir(), "forms-lock-"));
 const env = (data: string) => ({ ...(process.env as Record<string, string>), AGENTIC_FORMS_DATA: data });
@@ -163,7 +163,7 @@ describe("a lock left by a crash", () => {
       for (const args of [["responses", "poll"], ["new", "poll", "--title", "Poll"]]) {
         const run = cliSync(data, args);
         expect(run.status, `${content} ${args[0]}`).not.toBe(0);
-        expect(run.stderr).toContain("not an agentic-forms data file");
+        expect(run.stderr).toContain("not an agentic-identity store file");
       }
       expect(readFileSync(data, "utf8")).toBe(content);
     }

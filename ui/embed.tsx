@@ -14,6 +14,12 @@ export interface FormsUiOptions {
   getToken: () => string | Promise<string>;
 }
 
+/** Where a fill link points: the base URL of the client, without a trailing slash. */
+const shareBase = (baseUrl: string) => {
+  const url = new URL(baseUrl);
+  return (url.origin + url.pathname).replace(/\/+$/, "");
+};
+
 function check(options: FormsUiOptions): void {
   if (!options || typeof options.getToken !== "function") throw new TypeError("the forms UI needs a getToken function");
   // createClient refuses a bad baseUrl with a TypeError.
@@ -24,7 +30,7 @@ function check(options: FormsUiOptions): void {
 export function FormsUi({ baseUrl, getToken }: FormsUiOptions) {
   const api = useMemo(() => createClient({ baseUrl, token: getToken }), [baseUrl, getToken]);
   const hash = useHash();
-  return <Pages api={api} hash={hash} origin={new URL(baseUrl).origin} />;
+  return <Pages api={api} hash={hash} origin={shareBase(baseUrl)} />;
 }
 
 export interface MountedForms {
@@ -36,6 +42,7 @@ export interface MountedForms {
 
 /** Render the forms UI into an element, for an app that does not use React itself. */
 export function mount(element: HTMLElement, options: FormsUiOptions): MountedForms {
+  if (!(element instanceof HTMLElement)) throw new TypeError("mount needs an element to render into");
   check(options);
   const root = createRoot(element);
   const render = (next: FormsUiOptions) =>

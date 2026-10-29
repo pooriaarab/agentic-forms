@@ -44,6 +44,10 @@ describe("mount", () => {
     expect(host.innerHTML).toBe("");
   });
 
+  it("throws a TypeError when the element is missing", () => {
+    expect(() => mount(null as never, base)).toThrow(TypeError);
+  });
+
   it("lists the forms of the token and sends the callback token on each call", async () => {
     const getToken = vi.fn(async () => "fresh-token");
     await act(async () => void (mounted = mount(host, { ...base, getToken })));

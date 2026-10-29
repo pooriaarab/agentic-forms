@@ -212,7 +212,7 @@ function Editor({ api, initial, reload, origin }: { api: Client; initial: Form; 
 
 const tabValue = () => /\/(preview|responses)$/.exec(location.hash)?.[1] ?? "questions";
 
-/** `origin` is where the public fill link points: the Worker origin. */
+/** `origin` is where the public fill link points: the Worker base URL, with no trailing slash. */
 export function Builder({ api, formId, origin = location.origin }: { api: Client; formId: string; origin?: string }) {
   const [load, reload] = useLoad((signal) => api.getForm(formId, { signal }), formId);
   // The hash changes with the tab, so a re-render reads the current tab.

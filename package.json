@@ -61,7 +61,7 @@
     "build:ui": "node scripts/build-ui.mjs",
     "typecheck": "tsc --noEmit && tsc -p ui --noEmit",
     "test": "npm run build:ui && vitest run",
-    "test:ui": "npm run build:ui && playwright test",
+    "test:ui": "npm run build && npm run build:ui && playwright test",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build",
     "ci:local": "npm run build && npm run typecheck && npm test && npm run test:ui",

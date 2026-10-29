@@ -149,9 +149,9 @@ forms.update({ baseUrl: "https://other.example.com", getToken }); // point it at
 forms.unmount(); // remove the UI
 ```
 
-`getToken` may return a promise. An empty token, or a refused call, shows as an error in the UI. A missing
+`getToken` may return a promise. An empty token, or a refused call, shows as an error in the UI. The person presses Try again after the token is valid. A missing
 `getToken` or a bad `baseUrl` throws a `TypeError` and renders nothing. The server still checks every call against
-the token. The share link of a form points at the origin of `baseUrl`. The pages follow the address hash
+the token. The share link of a form points at `baseUrl`. The pages follow the address hash
 (`#/forms/<id>`), so they own that hash while mounted. `react` and `react-dom` (version 19) are peer dependencies.
 `createClient` from `agentic-forms/client` also accepts a function for `token`.
 

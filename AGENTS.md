@@ -31,6 +31,9 @@ form logic. A submit checks the answers against the newest published version.
 | export_csv | Export all responses as CSV. |
 | purge_expired | Delete responses past the retention period. |
 | purge_all | Delete expired responses of every form. |
+| share_form | Give a person or an agent a role. Needs a Worker (`AGENTIC_FORMS_URL`, `AGENTIC_FORMS_TOKEN`). |
+| list_shares | List who holds a role. Same setup. |
+| unshare_form | Take a role away. Same setup. |
 
 ## The loop
 

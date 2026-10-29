@@ -6,6 +6,7 @@ import { FormError, VersionConflictError } from "./core/repo.js";
 import { createMemoryStore, type Store } from "agentic-identity";
 import { SubmitError } from "./core/responses.js";
 import { formSpecSchema, formUpdateSchema, questionSchema } from "./core/schema.js";
+import { ApiError, createClient } from "./client.js";
 import { OpsError, createOps } from "./ops.js";
 import { VERSION } from "./version.js";
 
@@ -13,11 +14,18 @@ const answersSchema = z.record(z.union([z.string(), z.number(), z.array(z.string
 
 function describe(error: unknown): string | undefined {
   if (error instanceof ZodError) return error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ");
+  if (error instanceof ApiError) return `${error.code}: ${error.message}`;
   if (error instanceof OpsError || error instanceof FormError || error instanceof VersionConflictError || error instanceof SubmitError) return error.message;
   return undefined;
 }
 
-export function createMcpServer(store: Store = createMemoryStore()): McpServer {
+export interface RemoteOptions {
+  /** The Worker origin. With it, the server also has the sharing tools. */
+  url: string;
+  token: string;
+}
+
+export function createMcpServer(store: Store = createMemoryStore(), remote?: RemoteOptions): McpServer {
   const ops = createOps(store);
   const server = new McpServer({ name: "agentic-forms", version: VERSION });
   // Tool args are checked by each tool's zod shape before `run` sees them.
@@ -46,9 +54,17 @@ export function createMcpServer(store: Store = createMemoryStore()): McpServer {
   tool("export_csv", "Export every response as CSV.", form, true, ({ form: id }) => ops.exportCsv(id));
   tool("purge_expired", "Delete responses past the retention period.", form, false, ({ form: id }) => ops.purge(id));
   tool("purge_all", "Delete expired responses of every form.", {}, false, () => ops.purgeAll());
+  // Roles live on the Worker. A local store has none, so these tools exist only with a Worker.
+  if (remote) {
+    const client = createClient({ baseUrl: remote.url, token: remote.token });
+    const subject = { subject: z.string().describe("The id of the person or agent."), kind: z.enum(["human", "agent"]).describe("A person and an agent with one id hold separate roles.") };
+    tool("share_form", "Give a person or an agent a role on a form, through the Worker. Needs an owner token. A role is owner, editor, or viewer.", { ...form, ...subject, role: z.enum(["owner", "editor", "viewer"]) }, false, ({ form: id, ...share }) => client.share(id, share));
+    tool("list_shares", "List who holds a role on a form, through the Worker. Needs an owner token.", { ...form, limit: z.number().int().min(1).optional(), cursor: z.string().optional() }, true, ({ form: id, ...page }) => client.listShares(id, page));
+    tool("unshare_form", "Take a role away on a form, through the Worker. Needs an owner token.", { ...form, ...subject }, false, ({ form: id, subject: who, kind }) => client.revokeShare(id, who, kind));
+  }
   return server;
 }
 
-export async function startMcp(store?: Store): Promise<void> {
-  await createMcpServer(store).connect(new StdioServerTransport());
+export async function startMcp(store?: Store, remote?: RemoteOptions): Promise<void> {
+  await createMcpServer(store, remote).connect(new StdioServerTransport());
 }

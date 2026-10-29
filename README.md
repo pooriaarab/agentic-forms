@@ -50,6 +50,17 @@ npx agentic-forms from-prompt --spec spec.json --publish   # an agent writes the
 npx agentic-forms mcp                                      # MCP tools on stdio
 ```
 
+To share a form, use a Worker. A local file has no roles, so these commands need `--url` (or `AGENTIC_FORMS_URL`) and the token of an owner in `AGENTIC_FORMS_TOKEN`:
+
+```sh
+export AGENTIC_FORMS_URL=https://forms.example.com AGENTIC_FORMS_TOKEN=<token>
+npx agentic-forms share poll --subject bob --kind human --role editor   # give a role (owner only)
+npx agentic-forms shares poll                                           # who holds a role (owner only)
+npx agentic-forms unshare poll --subject bob --kind human               # take it away
+```
+
+A role is `owner`, `editor`, or `viewer`. A refused call prints `error: <code>: <message>` and exits 1. The Worker has no share links: share with named people and agents. With the same two variables, `agentic-forms mcp` also has the tools `share_form`, `list_shares`, and `unshare_form`. Without them, these tools do not exist.
+
 The CLI keeps data in `./agentic-forms.json` (`--data` or `AGENTIC_FORMS_DATA` change it). The file uses the store format of agentic-identity. A file written by 0.5.0 or earlier is refused and not migrated.
 `from-prompt` takes a JSON spec (`formSpecSchema`). No model runs inside this package.
 
@@ -111,7 +122,7 @@ try {
 }
 ```
 
-There is one method per API route: `health`, `listForms`, `createForm`, `getForm`, `updateForm`, `addQuestion`, `publishForm`, `listResponses`, `exportCsv`, `purge`, `eraseForm`, `share`, `revokeShare`, `listAudit`, `purgeAll`, `migrateGrants`, `backfillOwners`, and the public `submit` (it sends no token). `GET /f/<id>` is a page for people, so it has no method.
+There is one method per API route: `health`, `listForms`, `createForm`, `getForm`, `updateForm`, `addQuestion`, `publishForm`, `listResponses`, `exportCsv`, `purge`, `eraseForm`, `share`, `listShares`, `revokeShare`, `listAudit`, `purgeAll`, `migrateGrants`, `backfillOwners`, and the public `submit` (it sends no token). `GET /f/<id>` is a page for people, so it has no method.
 
 - A refused call throws `ApiError` with `status` (HTTP status), `code` (the API `error` field), `message`, `retryAfter` (seconds, on a 429), and `issues` when the API lists faults.
 - Every method takes `{ signal }` last, to cancel the call with an `AbortSignal`. A cancel rejects with the reason of the signal (an `AbortError` by default).

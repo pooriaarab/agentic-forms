@@ -66,7 +66,7 @@ handler for the purge job. Your Wrangler config needs these:
 `FORMS_API_TOKEN` is optional. See `wrangler.jsonc` in this repo for an example. The web UI is not in
 the package, so `/ui/` answers 404 in this setup.
 
-In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. The API reads only a bearer token of 1 to 512 letters, digits, `_` and `-`. Any other token answers 401 before the port runs. The Worker uses one shared token, which acts as one principal that owns every form it makes.
+In code, pass any `Auth` port of `agentic-identity` to `createApp({ auth })`. An `Authorization` header must be a bearer token of 1 to 512 letters, digits, `_` and `-`. Any other header answers 401 before the port runs. A write with no `Authorization` header answers 403 `bad origin`, so a cookie cannot sign in a write. The Worker uses one shared token, which acts as one principal that owns every form it makes.
 Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token needs 32 to 512 bytes of letters, digits, `_` and `-` (for example `openssl rand -hex 32`). With another token the Worker refuses to serve. The token is a bootstrap. The Worker also accepts credentials kept in the store, and they survive a restart. Make one in code: write a principal with `store.put("principals", id, { id, kind: "human", scopes: ["*:admin"] })`, then call `issueCredential(store, { principalId: id, kind: "api_key" })` from agentic-identity. It returns the bearer token once. Only the bearer header counts, not a cookie. With no token set, the Worker logs a warning. With no token and no stored credential, every call answers 401.
 
 ## Live demo
@@ -199,7 +199,7 @@ the token. The share link of a form points at `baseUrl`. The pages follow the ad
 
 - The Worker needs a D1 database. Create it in the EU: `wrangler d1 create agentic-forms --location weur`.
   Put its id in `wrangler.jsonc` and keep `FORMS_REGION` at `eu`. The region is your claim, and D1 refuses a query that another region served.
-- The CLI and MCP server keep data in one JSON file. It is safe for several processes, and it is not a database. Each read loads the whole file, so keep it to small data sets. A file in an older format fails with a clear error.
+- The CLI and MCP server keep data in one JSON file. It is safe for several processes, except that a write slower than 3 seconds can lose a concurrent one. It is not a database. Each read loads the whole file, so keep it to small data sets. A file in an older format fails with a clear error.
 - Local `wrangler dev` uses a D1 that reports no region, so the region check fails there. For local work only, set `FORMS_REGION=unknown` and `FORMS_UNSAFE_LOCAL_REGION=1`. Never set `FORMS_UNSAFE_LOCAL_REGION` in a deployed Worker.
 - Import `createMemoryStore` and the `Store` types from `agentic-identity`. This package does not re-export them.
 - The fill page needs JavaScript and does not show file questions.

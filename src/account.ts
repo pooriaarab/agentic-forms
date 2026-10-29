@@ -140,6 +140,8 @@ export const formsAccount: FormsAccount = {
       try {
         const sole = grant.role === "owner" && (await soleOwner(store, formId));
         if (sole) {
+          // Sharing finds an owner only under the standard key. A grant under another key would pass the data erase and then be refused.
+          if (grant.id !== `${formId}:${subject.kind}:${subject.id}`) throw new Error("the owner grant has a key that sharing does not honor");
           if ((await store.query("resources", { where: { parentId: formId }, limit: 1 })).items.length > 0) throw new Error("the form has child resources");
           const others = (await collect(store, "grants", { resourceId: formId })).length;
           const trail = (await collect(store, "audit", { resourceId: formId })).length;

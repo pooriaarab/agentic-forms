@@ -192,4 +192,14 @@ describe("eraseAccount", () => {
     expect(await formsAccount.eraseAccount(ANA, { store })).toMatchObject({ forms: 0, grants: 1 });
     expect(await store.get("grants", "bob-form:human:ana")).toBeNull();
   });
+
+  it("stops before any data goes when the owner grant has a key sharing does not honor", async () => {
+    const store = createMemoryStore();
+    await make(store, "ana-form", ctx("ana"));
+    await store.delete("grants", "ana-form:human:ana");
+    await store.put("grants", "ana-form:old", { resourceId: "ana-form", subjectKind: "human", subjectId: "ana", role: "owner" });
+    await expect(formsAccount.eraseAccount(ANA, { store })).rejects.toThrow(/erase stopped at form ana-form/);
+    expect(await store.get("forms", "ana-form")).not.toBeNull();
+    expect((await all(store, "responses")).length).toBe(1);
+  });
 });

@@ -24,6 +24,7 @@ let serving: Promise<ReturnType<typeof createApp>> | undefined;
 async function openStore(env: WorkerEnv) {
   const region = parseRegion(env.FORMS_REGION);
   if (region === "unknown" && !(env.FORMS_REGION === "unknown" && env.FORMS_UNSAFE_LOCAL_REGION === "1")) throw new Error('FORMS_REGION must be "eu" or "us"');
+  if (region === "unknown") console.warn("FORMS_UNSAFE_LOCAL_REGION is on: the database region is not checked. Use it for local development only.");
   await env.DB.prepare(D1_SCHEMA).run();
   const store = createD1Store(env.DB, { region });
   return { store, ops: createOps(store) };

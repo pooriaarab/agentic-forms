@@ -139,9 +139,15 @@ describe("durable storage", () => {
   });
 
   test("a region that is not eu or us makes the Worker refuse to serve", async () => {
-    for (const [i, region] of ["mars", "unknown"].entries()) {
-      await start(8805 + i, TOKEN, { vars: [`FORMS_REGION:${region}`] });
-      expect((await fetch(`http://127.0.0.1:${8805 + i}/health`)).status, region).toBe(500);
+    const cases: [string, string[]][] = [
+      ["mars", ["FORMS_REGION:mars"]],
+      ["unknown", ["FORMS_REGION:unknown"]],
+      ["unknown, flag 0", ["FORMS_REGION:unknown", "FORMS_UNSAFE_LOCAL_REGION:0"]],
+      ["unknown, flag true", ["FORMS_REGION:unknown", "FORMS_UNSAFE_LOCAL_REGION:true"]],
+    ];
+    for (const [i, [name, vars]] of cases.entries()) {
+      await start(8830 + i, TOKEN, { vars });
+      expect((await fetch(`http://127.0.0.1:${8830 + i}/health`)).status, name).toBe(500);
     }
   });
 });

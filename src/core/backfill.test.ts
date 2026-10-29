@@ -17,7 +17,7 @@ describe("owner backfill", () => {
     const store = createMemoryStore();
     await legacy(store, "a");
     await legacy(store, "b");
-    expect(await backfillOwners(store, "olga")).toEqual({ created: ["a", "b"], skipped: 0, conflicts: [] });
+    expect(await backfillOwners(store, "olga")).toEqual({ created: ["a", "b"], skipped: 0, conflicts: [], invalid: [] });
     expect(await grants(store)).toEqual(["a:olga", "b:olga"]);
     expect((await store.get("resources", "a"))?.type).toBe("form");
     expect((await store.get("grants", "a:olga"))?.role).toBe("owner");
@@ -28,8 +28,8 @@ describe("owner backfill", () => {
     await legacy(store, "a");
     await backfillOwners(store, "olga");
     const before = JSON.stringify((await store.query("grants")).items);
-    expect(await backfillOwners(store, "olga")).toEqual({ created: [], skipped: 1, conflicts: [] });
-    expect(await backfillOwners(store, "someone-else")).toEqual({ created: [], skipped: 1, conflicts: [] });
+    expect(await backfillOwners(store, "olga")).toEqual({ created: [], skipped: 1, conflicts: [], invalid: [] });
+    expect(await backfillOwners(store, "someone-else")).toEqual({ created: [], skipped: 1, conflicts: [], invalid: [] });
     expect(JSON.stringify((await store.query("grants")).items)).toBe(before);
   });
 
@@ -38,7 +38,7 @@ describe("owner backfill", () => {
     await legacy(store, "mine");
     await createSharing(store).createResource(human("sam"), { id: "mine", type: "form" });
     await legacy(store, "old");
-    expect(await backfillOwners(store, "olga")).toEqual({ created: ["old"], skipped: 1, conflicts: [] });
+    expect(await backfillOwners(store, "olga")).toEqual({ created: ["old"], skipped: 1, conflicts: [], invalid: [] });
     expect(await grants(store)).toEqual(["mine:sam", "old:olga"]);
   });
 
@@ -46,7 +46,7 @@ describe("owner backfill", () => {
     const store = createMemoryStore();
     await legacy(store, "x");
     await createSharing(store).createResource(human("bob", ["doc:write"]), { id: "x", type: "doc" });
-    expect(await backfillOwners(store, "olga")).toEqual({ created: [], skipped: 0, conflicts: ["x"] });
+    expect(await backfillOwners(store, "olga")).toEqual({ created: [], skipped: 0, conflicts: ["x"], invalid: [] });
     expect(await grants(store)).toEqual(["x:bob"]);
   });
 
@@ -68,8 +68,16 @@ describe("owner backfill", () => {
     const second = await backfillOwners(store, "olga", { limit: 2, cursor: first.nextCursor });
     expect(second.created).toEqual(["c", "d"]);
     const third = await backfillOwners(store, "olga", { limit: 2, cursor: second.nextCursor });
-    expect(third).toEqual({ created: ["e"], skipped: 0, conflicts: [] });
+    expect(third).toEqual({ created: ["e"], skipped: 0, conflicts: [], invalid: [] });
     expect(await grants(store)).toHaveLength(5);
+  });
+
+  test("a form id that sharing cannot hold is reported and does not stop the run", async () => {
+    const store = createMemoryStore();
+    for (const id of ["a", "my.form", "Umfrage 2025", "z"]) await legacy(store, id);
+    const result = await backfillOwners(store, "olga");
+    expect(result).toEqual({ created: ["a", "z"], skipped: 0, conflicts: [], invalid: ["Umfrage 2025", "my.form"] });
+    expect(await grants(store)).toEqual(["a:olga", "z:olga"]);
   });
 
   test("a bad owner is refused and nothing is written", async () => {
@@ -98,7 +106,7 @@ describe("POST /api/v1/backfill-owners", () => {
     expect((await call(human("olga"), "forms/a")).status).toBe(404);
     const res = await call(human("root"), "backfill-owners", "POST", { owner: "olga" });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ created: ["a"], skipped: 0, conflicts: [] });
+    expect(await res.json()).toEqual({ created: ["a"], skipped: 0, conflicts: [], invalid: [] });
     expect((await call(human("olga"), "forms/a")).status).toBe(200);
   });
 
@@ -108,14 +116,14 @@ describe("POST /api/v1/backfill-owners", () => {
     const first = (await (await call(human("root"), "backfill-owners", "POST", { owner: "olga", limit: 2 })).json()) as { created: string[]; nextCursor: string };
     expect(first.created).toEqual(["a", "b"]);
     const second = await (await call(human("root"), "backfill-owners", "POST", { owner: "olga", limit: 2, cursor: first.nextCursor })).json();
-    expect(second).toEqual({ created: ["c"], skipped: 0, conflicts: [] });
+    expect(second).toEqual({ created: ["c"], skipped: 0, conflicts: [], invalid: [] });
   });
 
   test("a caller without the all-forms admin scope gets 403, and a bad owner gets 400", async () => {
     const { store, call } = await setup();
     await legacy(store, "a");
     expect((await call(human("olga", ["form:admin"]), "backfill-owners", "POST", { owner: "olga" })).status).toBe(403);
-    for (const body of [{}, null, "x", [], { owner: "a b" }, { owner: 5 }, { owner: "olga", limit: 0 }, { owner: "olga", limit: 1.5 }, { owner: "olga", limit: "5" }, { owner: "olga", cursor: "junk" }, { owner: "olga", cursor: 5 }]) expect((await call(human("root"), "backfill-owners", "POST", body)).status).toBe(400);
+    for (const body of [{}, null, "x", [], { owner: "a b" }, { owner: 5 }, { owner: "olga", limit: 0 }, { owner: "olga", limit: 26 }, { owner: "olga", limit: 1.5 }, { owner: "olga", limit: "5" }, { owner: "olga", cursor: "junk" }, { owner: "olga", cursor: 5 }]) expect((await call(human("root"), "backfill-owners", "POST", body)).status).toBe(400);
     expect(await grants(store)).toEqual([]);
   });
 });

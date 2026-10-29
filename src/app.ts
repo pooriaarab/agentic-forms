@@ -5,6 +5,7 @@ import { FormError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
 import { ROLES, createMemoryStore, createSharing, hasScope, type Action, type Auth, type PrincipalContext, type Role, type Store } from "agentic-identity";
 import { clientKey, createRateLimiter } from "./core/rate-limit.js";
+import { BACKFILL_PAGE } from "./core/backfill.js";
 import { FORM_ID, SUBJECT_ID } from "./core/schema.js";
 import { OpsError, createOps } from "./ops.js";
 import { renderFillPage } from "./page.js";
@@ -241,8 +242,8 @@ export function createApp(options: AppOptions = {}) {
     const { owner, cursor, limit } = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
     if (typeof owner !== "string" || !SUBJECT.test(owner)) return c.json({ error: "invalid_owner", message: 'give an owner of letters, digits, "-" and "_"' }, 400);
     if (cursor !== undefined && (typeof cursor !== "string" || !wellFormedCursor(cursor))) return c.json({ error: "invalid_query", message: "the cursor is not valid" }, 400);
-    if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT)) {
-      return c.json({ error: "invalid_query", message: `limit is a whole number from 1 to ${MAX_LIMIT}` }, 400);
+    if (limit !== undefined && (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > BACKFILL_PAGE)) {
+      return c.json({ error: "invalid_query", message: `limit is a whole number from 1 to ${BACKFILL_PAGE}` }, 400);
     }
     return c.json(await ops.backfillOwners(owner, { cursor, limit }));
   });

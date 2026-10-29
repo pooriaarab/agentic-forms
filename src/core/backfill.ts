@@ -1,5 +1,5 @@
 import { createSharing, type PrincipalContext, type Store } from "agentic-identity";
-import { SUBJECT_ID } from "./schema.js";
+import { FORM_ID, SUBJECT_ID } from "./schema.js";
 
 /** Forms per pass. Each form costs a few D1 calls, and one Worker request may make only so many. */
 export const BACKFILL_PAGE = 25;
@@ -11,6 +11,8 @@ export interface BackfillResult {
   skipped: number;
   /** Forms whose id is held by a resource of another type. They need a person to decide. */
   conflicts: string[];
+  /** Forms whose id sharing cannot hold, such as "my.form". They are not changed. Rename or recreate them by hand. */
+  invalid: string[];
   /** Pass it back to go on. Absent when every form has been seen. */
   nextCursor?: string;
 }
@@ -29,8 +31,12 @@ export async function backfillOwners(store: Store, owner: string, options: { lim
   const sharing = createSharing(store);
   const ctx: PrincipalContext = { principalId: owner, kind: "human", chain: [{ id: owner, kind: "human" }], scopes: ["form:write"] };
   const page = await store.query("forms", { orderBy: { field: "id" }, limit: options.limit ?? BACKFILL_PAGE, cursor: options.cursor });
-  const result: BackfillResult = { created: [], skipped: 0, conflicts: [], ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) };
+  const result: BackfillResult = { created: [], skipped: 0, conflicts: [], invalid: [], ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) };
   for (const { id } of page.items) {
+    if (!FORM_ID.test(id)) {
+      result.invalid.push(id);
+      continue;
+    }
     try {
       await sharing.createResource(ctx, { id, type: "form" });
       result.created.push(id);

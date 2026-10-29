@@ -135,13 +135,14 @@ export async function runCli(argv: string[], out: (text: string) => void = conso
         out(JSON.stringify(await ops.purgeAll()));
         return 0;
       case "backfill-owners": {
-        const total = { created: [] as string[], skipped: 0, conflicts: [] as string[] };
+        const total = { created: [] as string[], skipped: 0, conflicts: [] as string[], invalid: [] as string[] };
         let cursor: string | undefined;
         do {
           const page = await ops.backfillOwners(str("owner"), { cursor });
           total.created.push(...page.created);
           total.skipped += page.skipped;
           total.conflicts.push(...page.conflicts);
+          total.invalid.push(...page.invalid);
           cursor = page.nextCursor;
         } while (cursor !== undefined);
         out(JSON.stringify(total));

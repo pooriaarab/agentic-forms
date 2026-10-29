@@ -78,6 +78,17 @@ describe("versions keep old responses readable", () => {
   });
 });
 
+describe("export with no responses", () => {
+  test("the header has the question columns of the published form, or of the draft before a publish", async () => {
+    const { repo, responses } = setup();
+    await repo.save(form([q("a"), q("b")]));
+    expect((await responses.exportCsv("f")).trim()).toBe("response_id,submitted_at,form_version,a,b");
+    await repo.publish("f");
+    await repo.save(form([q("a"), q("b"), q("draft_only")]));
+    expect((await responses.exportCsv("f")).trim()).toBe("response_id,submitted_at,form_version,a,b");
+  });
+});
+
 describe("rows and listing", () => {
   test("a response is a flat row keyed by question id", async () => {
     const { repo, responses } = setup();

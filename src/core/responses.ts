@@ -141,11 +141,19 @@ export function createResponses(store: Store, repo: FormRepo) {
         cursor = page.nextCursor;
       } while (cursor !== undefined);
 
+      // The current form gives columns too, so a form with no answers still has its question columns.
+      // It is the published version, or the draft before any publish.
+      const head = await repo.get(formId);
+      const current = (await repo.getPublished(formId)) ?? (head?.status === "draft" ? head : null);
       const versions = [...new Set(rows.map((r) => r.formVersion))].sort((a, b) => b - a);
-      const columns: string[] = [];
+      const forms: Form[] = current ? [current] : [];
       for (const version of versions) {
         const form = await repo.getVersion(formId, version);
         if (!form) throw new Error(`snapshot "${formId}@${version}" is missing`);
+        forms.push(form);
+      }
+      const columns: string[] = [];
+      for (const form of forms) {
         for (const section of form.sections) {
           for (const question of section.questions) if (!columns.includes(question.id)) columns.push(question.id);
         }

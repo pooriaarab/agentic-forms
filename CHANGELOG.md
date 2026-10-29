@@ -2,6 +2,17 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.9.0 - 2026-10-29
+
+### Changed
+
+- The `/ui` app and the public form page at `/f/<id>` have a calmer look. Spacing is wider, borders are one pixel, and the form page uses a smaller type scale. The look follows Tiny Little Office (https://tinylittleoffice.com, MIT): quiet neutrals and soft borders. No code is copied.
+- The builder has an "Add question" menu. Pick a type from the menu, and the dialog opens with that type chosen. The Type field stays in the dialog.
+- Click a question name in the builder to rename it in place. Enter keeps the new name, and Escape keeps the old one.
+- The reorder, edit, and remove buttons of a row show when the row has the pointer or the keyboard focus. On a touch screen, or a device that cannot hover, they always show.
+- The empty section and the responses table use the quieter look, with a row highlight in the table.
+- Move to `agentic-design` 0.5.x. Only token values changed, so no code that reads the semantic tokens needs an edit.
+
 ## 0.8.0 - 2026-10-29
 
 Breaking changes. Read these before you upgrade from 0.7.0:

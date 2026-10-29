@@ -27,6 +27,8 @@ const num = (text: string) => (text.trim() === "" || !Number.isFinite(Number(tex
 interface Props {
   /** The question to edit, or undefined for a new one. */
   question?: Question;
+  /** The type a new question starts with. */
+  initialType?: QuestionType;
   /** Questions that come earlier in the form. A condition may read only these. */
   earlier: Question[];
   taken: string[];
@@ -35,12 +37,12 @@ interface Props {
   onSave: (question: Question) => void;
 }
 
-export function QuestionDialog({ question, earlier, taken, open, onOpenChange, onSave }: Props) {
+export function QuestionDialog({ question, initialType, earlier, taken, open, onOpenChange, onSave }: Props) {
   const r = question?.rules ?? {};
   const [label, setLabel] = useState(question?.label ?? "");
   const [id, setId] = useState(question?.id ?? "");
   const [idTouched, setIdTouched] = useState(false);
-  const [type, setType] = useState<QuestionType>(question?.type ?? "short_text");
+  const [type, setType] = useState<QuestionType>(question?.type ?? initialType ?? "short_text");
   const [required, setRequired] = useState(question?.required ?? false);
   const [choices, setChoices] = useState((question?.choices ?? []).join("\n"));
   const [min, setMin] = useState(String(r.min ?? ""));

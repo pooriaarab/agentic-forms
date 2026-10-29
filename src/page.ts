@@ -1,24 +1,26 @@
 // The public fill page: one self-contained HTML document. No CDN, no third-party
 // script. The look comes from the agentic-design tokens, which the Worker serves at /ui/styles.css (self-hosted fonts); system fonts remain the fallback. Built for WCAG 2.2 AA: labels on every control,
-// visible focus, 44px targets, a text error summary, and no color-only cues.
+// visible focus, 40px targets (AA 2.5.8 needs 24px), a text error summary, and no color-only cues.
 import type { Form, Question } from "./core/form.js";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 const esc = (text: string): string => text.replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
 const STYLE = `
-body{margin:0;font:var(--agd-font-size-lg,1.125rem)/1.6 var(--agd-font-family-sans,system-ui,sans-serif);color:var(--agd-color-text,#1a1a1a);background:var(--agd-color-bg,#fff)}
-main{max-width:40rem;margin:0 auto;padding:1.5rem 1rem 4rem}
-fieldset{border:1px solid var(--agd-color-border-strong,#595959);border-radius:var(--agd-radius-md,4px);padding:1rem;margin:0 0 1.5rem}
-legend{font-weight:600;padding:0 .25rem}
-label{display:block;font-weight:600;margin:.75rem 0 .25rem}
-.opt{display:flex;gap:.5rem;align-items:center;min-height:44px}
+body{margin:0;font:var(--agd-font-size-md,1rem)/1.6 var(--agd-font-family-sans,system-ui,sans-serif);color:var(--agd-color-text,#1a1a1a);background:var(--agd-color-bg,#fff)}
+main{max-width:36rem;margin:0 auto;padding:3rem 1.25rem 5rem}
+h1{font-size:var(--agd-font-size-xl,1.5rem);line-height:1.25;margin:0 0 2rem;font-weight:600;letter-spacing:-.01em}
+fieldset{border:1px solid var(--agd-color-border,#d4d4d8);border-radius:var(--agd-radius-md,8px);padding:1rem 1.25rem;margin:0 0 1.5rem;background:var(--agd-color-surface,#fff)}
+legend{font-weight:500;padding:0 .25rem}
+label{display:block;font-weight:500;margin:1.25rem 0 .375rem}
+.opt{display:flex;gap:.625rem;align-items:center;min-height:2.5rem}
 .opt label{margin:0;font-weight:400}
-input[type=checkbox],input[type=radio]{width:1.5rem;height:1.5rem;flex:none;accent-color:var(--agd-color-accent,#0b57d0)}
-input:not([type=checkbox]):not([type=radio]),textarea,select{width:100%;box-sizing:border-box;min-height:44px;padding:.5rem;font:inherit;color:inherit;background:var(--agd-color-surface,#fff);border:2px solid var(--agd-color-border-strong,#595959);border-radius:var(--agd-radius-sm,4px)}
-:focus-visible{outline:3px solid var(--agd-color-focus,#0b57d0);outline-offset:2px}
-button{min-height:44px;padding:.5rem 1.5rem;font:inherit;font-weight:600;color:var(--agd-color-text-on-accent,#fff);background:var(--agd-color-accent,#0b57d0);border:2px solid var(--agd-color-accent,#0b57d0);border-radius:var(--agd-radius-sm,4px);cursor:pointer}
-#errors{border:3px solid var(--agd-color-danger,#b3261e);padding:1rem;margin:0 0 1.5rem}
+input[type=checkbox],input[type=radio]{width:1.25rem;height:1.25rem;flex:none;accent-color:var(--agd-color-accent,#0b57d0)}
+input:not([type=checkbox]):not([type=radio]),textarea,select{width:100%;box-sizing:border-box;min-height:2.5rem;padding:.5rem .75rem;font:inherit;color:inherit;background:var(--agd-color-surface,#fff);border:1px solid var(--agd-color-border-strong,#595959);border-radius:var(--agd-radius-md,8px)}
+:focus-visible{outline:2px solid var(--agd-color-focus,#0b57d0);outline-offset:2px}
+button{min-height:2.5rem;padding:.5rem 1.5rem;font:inherit;font-weight:500;color:var(--agd-color-text-on-accent,#fff);background:var(--agd-color-accent,#0b57d0);border:1px solid var(--agd-color-accent,#0b57d0);border-radius:var(--agd-radius-md,8px);cursor:pointer}
+#errors{border:1px solid var(--agd-color-danger,#b3261e);border-radius:var(--agd-radius-md,8px);background:var(--agd-color-danger-subtle,#fff);padding:1rem;margin:0 0 1.5rem}
+#done{padding:1.5rem;border:1px solid var(--agd-color-border,#d4d4d8);border-radius:var(--agd-radius-md,8px)}
 .req{font-weight:400}
 .notice{white-space:pre-line}
 [hidden]{display:none!important}`;

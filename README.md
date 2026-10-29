@@ -58,7 +58,7 @@ To run the Worker from your own Wrangler project, re-export its entry from `agen
 handler for the purge job. Your Wrangler config needs these:
 
 - A D1 database bound as `DB`, created in the EU.
-- The variable `FORMS_REGION`, set to `eu` or `us`. Without it, every request fails.
+- The variable `FORMS_REGION`, set to `eu` for that database. Without it, every request fails. A region that does not match the database also fails.
 - A Cron Trigger in `triggers.crons`. Without it, expired responses are never purged.
 - The secret `FORMS_RATE_SECRET`, 32 bytes or more. Without it, the Worker refuses requests.
 

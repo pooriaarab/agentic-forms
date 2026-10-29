@@ -2,6 +2,12 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.11.1 - 2026-10-29
+
+### Changed
+
+- Move to `agentic-design` 0.8.x. The package depends on `^0.8.0` now, so it installs next to the other `agentic-*` packages without an `ERESOLVE` error. The UI picks up the calmer look of `agentic-design` 0.5 and later. The screenshots in `docs/screenshots` are regenerated from the new look. No public API changes.
+
 ## 0.11.0 - 2026-10-29
 
 ### Added

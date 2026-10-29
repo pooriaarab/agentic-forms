@@ -71,7 +71,7 @@ Set the token as a secret: `wrangler secret put FORMS_API_TOKEN`. The token need
   draft. Old responses stay readable against their own version.
 - `exportCsv` writes every response as CSV. It makes formula cells inert.
 - Agent tools: nine MCP tools and one CLI command each for make, extend, publish, submit, list, export, and purge.
-- Access: every `/api/v1` route names the caller, and `can()` of `agentic-identity` decides it. The creator owns the form. Roles are owner, editor, and viewer. A viewer reads the form. An editor also edits, publishes, and reads answers. Only an owner shares, purges, and reads the audit log. A delegated agent keeps only the scopes it got. Each check is audited.
+- Access: every `/api/v1` route names the caller, and `can()` of `agentic-identity` decides it. The creator owns the form. Roles are owner, editor, and viewer. A viewer reads the form. An editor also edits, publishes, and reads answers. Only an owner shares, purges, deletes the form, and reads the audit log. A share names a kind, `human` or `agent`, because a person and an agent with the same id hold separate roles. Grants made before kinds are not honored until an admin runs `POST /api/v1/migrate-grants`. A delegated agent keeps only the scopes it got. Each check is audited.
 - Storage runs on the `Store` port of `agentic-identity`. The Worker uses D1, the
   CLI uses a locked JSON file, and tests use the memory adapter.
 

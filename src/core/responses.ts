@@ -105,6 +105,16 @@ export function createResponses(store: Store, repo: FormRepo) {
       await store.put(COLLECTION, response.id, response as unknown as Doc);
       return response;
     },
+    /** Deletes every response of a form, live or not. Returns the count. */
+    async eraseAll(formId: string): Promise<number> {
+      let erased = 0;
+      for (;;) {
+        const page = (await store.query(COLLECTION, { where: { formId }, limit: 100 })) as unknown as Page;
+        if (page.items.length === 0) return erased;
+        for (const { id } of page.items) await store.delete(COLLECTION, id);
+        erased += page.items.length;
+      }
+    },
     /** Deletes responses past their retention date. Returns the count. Rows with no date stay. A date that is not a valid time counts as expired. */
     async purgeExpired(formId: string, now: number = Date.now()): Promise<number> {
       let purged = 0;

@@ -66,7 +66,7 @@ describe("cli backfill-owners", () => {
     cli(["new", "old-form", "--title", "Old"]);
     const first = json(cli(["backfill-owners", "--owner", "olga"]).out);
     expect(first.created).toContain("old-form");
-    expect((await createFileStore(data).get("grants", "old-form:olga"))?.role).toBe("owner");
+    expect((await createFileStore(data).get("grants", "old-form:human:olga"))?.role).toBe("owner");
     expect(json(cli(["backfill-owners", "--owner", "olga"]).out).created).toEqual([]);
     expect(cli(["backfill-owners"]).code).toBe(2);
     expect(cli(["backfill-owners", "--owner", "a b"]).code).toBe(1);

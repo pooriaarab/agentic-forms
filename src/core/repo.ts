@@ -42,6 +42,15 @@ export function createFormRepo(store: Store) {
   return {
     get,
     getVersion,
+    /** Deletes the head and every frozen snapshot. Safe to run again. */
+    async erase(id: string): Promise<void> {
+      for (;;) {
+        const page = await store.query(VERSIONS, { where: { id }, limit: 100 });
+        if (page.items.length === 0) break;
+        for (const entry of page.items) await store.delete(VERSIONS, entry.id);
+      }
+      await store.delete(HEADS, id);
+    },
     /**
      * Stores a draft. Editing a published form starts the next version. Throws
      * FormError on unsound logic. With `expectedVersion`, the save is a

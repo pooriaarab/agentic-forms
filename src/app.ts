@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { SubmitError } from "./core/responses.js";
 import { FormError } from "./core/repo.js";
 import type { Form } from "./core/form.js";
-import { ROLES, createMemoryStore, createSharing, hasScope, type Action, type Auth, type PrincipalContext, type Role, type Store } from "agentic-identity";
+import { EraseRefusedError, MAX_AUDIT_PAGE, ROLES, SUBJECT_KINDS, createMemoryStore, createSharing, hasScope, migrateGrants, type Action, type Auth, type PrincipalContext, type Role, type Store, type SubjectKind } from "agentic-identity";
 import { clientKey, createRateLimiter } from "./core/rate-limit.js";
 import { BackfillError } from "./core/backfill.js";
 import { FORM_ID, SUBJECT_ID, wellFormedCursor } from "./core/schema.js";
@@ -13,6 +13,7 @@ import { VERSION } from "./version.js";
 
 const MAX_BODY = 65_536;
 const SUBJECT = SUBJECT_ID;
+const isSubjectKind = (kind: unknown): kind is SubjectKind => SUBJECT_KINDS.includes(kind as SubjectKind);
 const MAX_LIMIT = 1000;
 
 const SHARE_ROLES: readonly Role[] = ["owner", "editor", "viewer"];
@@ -137,15 +138,15 @@ export function createApp(options: AppOptions = {}) {
   // Lists the forms the caller's grants name. It reads the grants of the root of the chain,
   // so a list does not write one audit row per form. Scopes still narrow what an agent sees.
   // sharing.can writes an audit row for every check, allow or deny, so it cannot filter a list.
-  // identity 0.2.0 has no call to list the resources of a subject.
+  // A person and an agent with the same id are two subjects, so the read names the kind too.
   app.get(forms, async (c) => {
     const ctx = c.get("ctx");
-    const root = ctx.chain[0]?.id;
-    if (root === undefined || !hasScope(ctx.scopes, "form:read")) return c.json({ forms: [] });
+    const root = ctx.chain[0];
+    if (root === undefined || !isSubjectKind(root.kind) || !hasScope(ctx.scopes, "form:read")) return c.json({ forms: [] });
     const visible: Form[] = [];
     let cursor: string | undefined;
     do {
-      const page = await store.query("grants", { where: { subjectId: root }, orderBy: { field: "resourceId" }, cursor });
+      const page = await store.query("grants", { where: { subjectKind: root.kind, subjectId: root.id }, orderBy: { field: "resourceId" }, cursor });
       for (const { data } of page.items) {
         if (typeof data.resourceId !== "string" || !ROLES.includes(data.role as Role)) continue;
         if ((await store.get("resources", data.resourceId))?.type !== "form") continue;
@@ -189,25 +190,36 @@ export function createApp(options: AppOptions = {}) {
     await require(c, "admin", c.req.param("id"));
     return c.json(await ops.purge(c.req.param("id")));
   });
+  // Erases the form, its answers, and its grants, links, invites, and audit rows. Only an owner may.
+  app.delete(`${forms}/:id`, async (c) => {
+    await require(c, "admin", c.req.param("id"));
+    // The data goes first. A failed erase then leaves an owner who can run it again.
+    const { erased } = await ops.erase(c.req.param("id"));
+    await sharing.deleteResource(c.get("ctx"), c.req.param("id"));
+    return c.json({ ok: true, erased });
+  });
   app.post(`${forms}/:id/shares`, async (c) => {
     await require(c, "admin", c.req.param("id"));
-    const { subject, role } = await c.req.json();
-    if (typeof subject !== "string" || !SUBJECT.test(subject) || !SHARE_ROLES.includes(role as Role)) {
-      return c.json({ error: "invalid_share", message: `give a subject of letters, digits, "-" and "_", and a role of ${SHARE_ROLES.join(", ")}` }, 400);
+    const { subject, kind, role } = await c.req.json();
+    if (typeof subject !== "string" || !SUBJECT.test(subject) || !isSubjectKind(kind) || !SHARE_ROLES.includes(role as Role)) {
+      return c.json({ error: "invalid_share", message: `give a subject of letters, digits, "-" and "_", a kind of ${SUBJECT_KINDS.join(" or ")}, and a role of ${SHARE_ROLES.join(", ")}` }, 400);
     }
     // identity's grant() does not guard the last owner, so check here. Two owners demoted at the same moment can still pass.
     if (role !== "owner") {
       const owners = (await store.query("grants", { where: { resourceId: c.req.param("id"), role: "owner" }, limit: 2 })).items;
-      if (owners.length === 1 && owners[0]!.data.subjectId === subject) throw new OpsError("conflict", "the last owner cannot be removed");
+      if (owners.length === 1 && owners[0]!.data.subjectId === subject && owners[0]!.data.subjectKind === kind) throw new OpsError("conflict", "the last owner cannot be removed");
     }
-    await sharing.grant(c.get("ctx"), c.req.param("id"), subject, role as Role);
+    await sharing.grant(c.get("ctx"), c.req.param("id"), { kind, id: subject }, role as Role);
     return c.json({ ok: true });
   });
   app.delete(`${forms}/:id/shares/:subject`, async (c) => {
     await require(c, "admin", c.req.param("id"));
-    if (!SUBJECT.test(c.req.param("subject"))) return c.json({ error: "invalid_share", message: "the subject is not valid" }, 400);
+    const kind = c.req.query("kind");
+    if (!SUBJECT.test(c.req.param("subject")) || !isSubjectKind(kind)) {
+      return c.json({ error: "invalid_share", message: `give a valid subject and ?kind=${SUBJECT_KINDS.join(" or ")}` }, 400);
+    }
     try {
-      await sharing.revokeGrant(c.get("ctx"), c.req.param("id"), c.req.param("subject"));
+      await sharing.revokeGrant(c.get("ctx"), c.req.param("id"), { kind, id: c.req.param("subject") });
     } catch (error) {
       if (error instanceof Error && error.message === "the last owner cannot be removed") throw new OpsError("conflict", error.message);
       throw error;
@@ -216,7 +228,14 @@ export function createApp(options: AppOptions = {}) {
   });
   app.get(`${forms}/:id/audit`, async (c) => {
     await require(c, "admin", c.req.param("id"));
-    return c.json({ entries: await sharing.listAudit(c.get("ctx"), c.req.param("id")) });
+    const raw = c.req.query("limit");
+    const limit = raw === undefined ? undefined : Number(raw);
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_AUDIT_PAGE)) {
+      return c.json({ error: "invalid_query", message: `limit is a whole number from 1 to ${MAX_AUDIT_PAGE}` }, 400);
+    }
+    const cursor = c.req.query("cursor");
+    if (cursor !== undefined && !wellFormedCursor(cursor)) return c.json({ error: "invalid_query", message: "the cursor is not valid" }, 400);
+    return c.json(await sharing.listAudit(c.get("ctx"), c.req.param("id"), { limit, cursor }));
   });
   // Every form at once. Only a caller with the all-forms admin scope may run it.
   app.post("/api/v1/purge", async (c) => {
@@ -225,6 +244,11 @@ export function createApp(options: AppOptions = {}) {
   });
 
   // For forms made before roles. Only a caller with the all-forms admin scope may run it.
+  // Rewrites grants made before grants had a kind. Until then they are not honored. Safe to run again.
+  app.post("/api/v1/migrate-grants", async (c) => {
+    if (!hasScope(c.get("ctx").scopes, "*:admin")) throw new AccessError(403);
+    return c.json(await migrateGrants(store));
+  });
   app.post("/api/v1/backfill-owners", async (c) => {
     if (!hasScope(c.get("ctx").scopes, "*:admin")) throw new AccessError(403);
     const body = await c.req.json();
@@ -236,6 +260,7 @@ export function createApp(options: AppOptions = {}) {
   app.onError((error, c) => {
     if (error instanceof AccessError) return c.json({ error: error.status === 404 ? "not_found" : "forbidden" }, error.status);
     if (error instanceof OpsError) return c.json({ error: error.kind, message: error.message }, error.kind === "not_found" ? 404 : 409);
+    if (error instanceof EraseRefusedError) return c.json({ error: "conflict", message: error.message }, 409);
     if (error instanceof BackfillError) return c.json({ error: error.kind, message: error.message }, 400);
     if (error instanceof FormError || error instanceof SubmitError) return c.json({ error: "invalid", issues: error.issues }, 422);
     if (error instanceof ZodError) return c.json({ error: "invalid_spec", issues: error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) }, 400);

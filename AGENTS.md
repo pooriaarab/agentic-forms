@@ -13,7 +13,7 @@ form logic. A submit checks the answers against the newest published version.
 - SDK: `import { createOps, createFileStore } from "agentic-forms"`.
 - CLI: `npx agentic-forms --help`.
 - MCP: `npx agentic-forms mcp`, then call a tool below.
-- HTTP: `/api/v1/forms` on the Worker, with a bearer token. Roles per form: owner, editor, viewer. Share with `POST /api/v1/forms/<id>/shares` (`{subject, role}`). `POST /f/<id>` is the public submit.
+- HTTP: `/api/v1/forms` on the Worker, with a bearer token. Roles per form: owner, editor, viewer. Share with `POST /api/v1/forms/<id>/shares` (`{subject, kind, role}`, kind is `human` or `agent`: a person and an agent with the same id hold separate roles). `DELETE /api/v1/forms/<id>` erases a form, its answers, and its grants. `POST /f/<id>` is the public submit.
 
 ## MCP tools
 

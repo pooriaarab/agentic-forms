@@ -79,6 +79,12 @@ export function createOps(store: Store) {
     },
     /** Gives forms made before roles an owner row for `owner`. One page per call: go on while `nextCursor` is set. Safe to run again. */
     backfillOwners: (owner: string, options?: { limit?: number; cursor?: string }) => backfillOwners(store, owner, options),
+    /** Hard-deletes a form, its snapshots, and all its responses. Safe to run again. */
+    async erase(formId: string) {
+      const erased = await responses.eraseAll(formId);
+      await repo.erase(formId);
+      return { erased };
+    },
     async purge(formId: string) {
       await get(formId);
       return { purged: await responses.purgeExpired(formId) };

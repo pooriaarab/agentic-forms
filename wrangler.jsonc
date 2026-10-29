@@ -2,8 +2,6 @@
   "name": "agentic-forms",
   "main": "src/worker.ts",
   "compatibility_date": "2026-01-01",
-  // agentic-identity reads its version through node:module.
-  "compatibility_flags": ["nodejs_compat"],
   // Hard-delete responses past their retention date, every 10 minutes.
   "triggers": { "crons": ["7,17,27,37,47,57 * * * *"] },
   "vars": { "FORMS_REGION": "eu" },

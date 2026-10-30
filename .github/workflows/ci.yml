@@ -12,6 +12,9 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dependencies: [locked, lower]
     env:
       WRANGLER_SEND_METRICS: "false"
     steps:
@@ -20,6 +23,8 @@ jobs:
         with:
           node-version: "22"
       - run: npm ci
+      - if: matrix.dependencies == 'lower'
+        run: npm install --no-save agentic-identity@0.9.0 agentic-design@0.8.0
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
@@ -28,6 +33,9 @@ jobs:
 
   ui:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dependencies: [locked, lower]
     env:
       WRANGLER_SEND_METRICS: "false"
     steps:
@@ -36,6 +44,8 @@ jobs:
         with:
           node-version: "22"
       - run: npm ci
+      - if: matrix.dependencies == 'lower'
+        run: npm install --no-save agentic-identity@0.9.0 agentic-design@0.8.0
       - uses: actions/cache@v4
         id: playwright-cache
         with:

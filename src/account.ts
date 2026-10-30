@@ -1,6 +1,6 @@
 // The package's side of the account contract: a host calls `exportAccount` and `eraseAccount`
-// and never reads the storage layout. The shape is provisional: it is the contract that a later
-// `agentic-identity` release adds to `agentic-identity/account` as `AccountPackage`. The `AccountApp` of earlier releases is a different contract, and this does not fit it.
+// and never reads the storage layout. The shape is provisional and does not yet fit
+// the `AccountPackage` contract in `agentic-identity` 0.10.
 import { MAX_FOLDER_DEPTH, MAX_OWNERS_ON_ERASE, SUBJECT_KINDS, createSharing, type Doc, type PrincipalContext, type Store, type Subject } from "agentic-identity";
 import { createOps } from "./ops.js";
 

@@ -1,6 +1,6 @@
 {
   "name": "agentic-forms",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "description": "Build forms and collect answers into tables.",
   "keywords": [
     "forms",
@@ -75,8 +75,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.23.0",
-    "agentic-design": "^0.8.0",
-    "agentic-identity": "^0.9.0",
+    "agentic-design": ">=0.8.0 <0.10.0",
+    "agentic-identity": ">=0.9.0 <0.11.0",
     "hono": "^4.13.14",
     "re2js": "^2.9.1",
     "zod": "^4.6.6"

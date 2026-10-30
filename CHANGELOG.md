@@ -2,6 +2,12 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.11.3 - 2026-10-30
+
+### Changed
+
+- Accept `agentic-design` 0.10.x alongside the earlier supported releases.
+
 ## 0.11.2 - 2026-10-30
 
 ### Changed

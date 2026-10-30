@@ -2,6 +2,12 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.11.5 - 2026-10-30
+
+### Changed
+
+- Accept supported `agentic-design` and `agentic-identity` releases below 1.0.0.
+
 ## 0.11.4 - 2026-10-30
 
 ### Changed

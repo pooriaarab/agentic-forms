@@ -15,7 +15,7 @@ Build forms and collect answers into tables.
 npm install agentic-forms
 ```
 
-It needs Node 22 or newer. It depends on `agentic-identity` 0.9.x–0.11.x and `agentic-design` 0.8.x–0.10.x.
+It needs Node 22 or newer. It depends on `agentic-identity` 0.9.x–0.11.x and `agentic-design` 0.8.x–0.10.x. `agentic-realtime` 0.6.x needs an older identity version, so an install with identity 0.11.x can contain two copies. Error classes from those copies do not share an identity.
 
 ## Quick start
 

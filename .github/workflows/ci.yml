@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        dependencies: [locked, lower]
+        dependencies: [locked, lower, latest]
     env:
       WRANGLER_SEND_METRICS: "false"
     steps:
@@ -23,11 +23,22 @@ jobs:
         with:
           node-version: "22"
       - run: npm ci
+      - if: matrix.dependencies == 'latest'
+        run: npm install --no-save agentic-identity@latest agentic-design@latest
       - if: matrix.dependencies == 'lower'
         run: npm install --no-save agentic-identity@0.9.0 agentic-design@0.8.0
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
+      - name: Check consumer install
+        if: matrix.dependencies == 'locked'
+        run: |
+          archive="$(npm pack --ignore-scripts --pack-destination /tmp --silent)"
+          consumer="$(mktemp -d)"
+          cd "$consumer"
+          npm init -y
+          npm install "/tmp/$archive" agentic-identity@latest agentic-design@latest agentic-realtime@latest
+          npm ls agentic-identity
       - name: dev smoke
         run: node scripts/dev-vars.mjs && node scripts/dev-smoke.mjs 8792 /health
 
@@ -35,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        dependencies: [locked, lower]
+        dependencies: [locked, lower, latest]
     env:
       WRANGLER_SEND_METRICS: "false"
     steps:
@@ -44,6 +55,8 @@ jobs:
         with:
           node-version: "22"
       - run: npm ci
+      - if: matrix.dependencies == 'latest'
+        run: npm install --no-save agentic-identity@latest agentic-design@latest
       - if: matrix.dependencies == 'lower'
         run: npm install --no-save agentic-identity@0.9.0 agentic-design@0.8.0
       - uses: actions/cache@v4

@@ -15,7 +15,7 @@ Build forms and collect answers into tables.
 npm install agentic-forms
 ```
 
-It needs Node 22 or newer. It depends on `agentic-identity` 0.7.x and `agentic-design` 0.5.x.
+It needs Node 22 or newer. It depends on `agentic-identity` 0.9.x–0.10.x and `agentic-design` 0.8.x–0.9.x.
 
 ## Quick start
 
@@ -191,7 +191,7 @@ const counts = await formsAccount.eraseAccount({ id: "ana", kind: "human" }, { s
 - The erase removes each form that the subject alone owns, with its snapshots, answers, grants, and audit entries, including the entries of other people on that form. A form with another owner stays (also an owner of a folder above it), and only the subject's grant goes. The grants of the subject on other forms go too. Last, the audit entries rooted in the subject go. It returns counts by the same names.
 - A repeat of the erase counts zero. If it stops, the error names the form id and the counts so far. The counts of a run that stopped can be low. A stop before the form row goes is finished by a repeat. A stop after it leaves no data, but the counts of that form can be missing. Grants and audit entries on a form that is already gone are not matched and stay.
 - Answers hold no respondent id, so they are exported only with their form. A grant with no valid kind stops both calls: run `migrateGrants` first. Audit entries are matched only on forms, and only with a known root kind. Invites and links keep the id of their maker with no kind, so they leave only with their form.
-- The shape is provisional: a later `agentic-identity` release names it `AccountPackage`. Stop writes before you run the erase.
+- The shape is provisional and does not yet fit the `AccountPackage` contract in `agentic-identity` 0.10. Stop writes before you run the erase.
 
 ## UI
 

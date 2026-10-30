@@ -1,14 +1,12 @@
-// The package's side of the account contract: a host calls `exportAccount` and `eraseAccount`
-// and never reads the storage layout. The shape is provisional and does not yet fit
-// the `AccountPackage` contract in `agentic-identity` 0.10.
-import { MAX_FOLDER_DEPTH, MAX_OWNERS_ON_ERASE, SUBJECT_KINDS, createSharing, type Doc, type PrincipalContext, type Store, type Subject } from "agentic-identity";
+import type { AccountPackage, AccountSubject } from "agentic-identity/account";
+import { MAX_FOLDER_DEPTH, MAX_OWNERS_ON_ERASE, SUBJECT_KINDS, PRINCIPAL_KINDS, createSharing, type Json, type Doc, type PrincipalContext, type Store } from "agentic-identity";
 import { createOps } from "./ops.js";
 
 export interface FormsAccountDeps {
   store: Store;
 }
 
-type JsonRecord = Record<string, unknown>;
+type JsonRecord = Record<string, Json>;
 export type FormsCollection = "forms" | "form_versions" | "responses" | "grants" | "audit";
 
 /** Refused input, or an erase that stopped. A message names a form id, never answers or people. */
@@ -19,7 +17,7 @@ export class FormsAccountError extends Error {
   }
 }
 
-export interface FormsAccount {
+export interface FormsAccount extends AccountPackage<FormsAccountDeps> {
   id: "forms";
   /**
    * Collections: `forms` and `form_versions` (the forms the subject owns, head and frozen snapshots), `responses` (the answers
@@ -27,7 +25,7 @@ export interface FormsAccount {
    * the subject). It holds no format, version, or time: the host's manifest has them. Answers hold no respondent id, so an answer
    * is exported only with the form it was sent to. The `madeBy` mark on a question is `human` or `agent` with no id: it travels with the form.
    */
-  exportAccount(subject: Subject, deps: FormsAccountDeps): Promise<Record<FormsCollection, JsonRecord[]>>;
+  exportAccount(subject: AccountSubject, deps: FormsAccountDeps): Promise<Record<FormsCollection, JsonRecord[]>>;
   /**
    * Erases each form that the subject is the only owner of, with its snapshots, answers, grants, and audit entries. A form with
    * another owner stays: only the subject's grant goes, as do the grants the subject holds on forms of others. Last, the audit
@@ -35,16 +33,16 @@ export interface FormsAccount {
    * A failure names the form id. A stop before the resource row goes is finished by a repeat. The counts of a run that stopped can be low, because a stop inside the resource erase may follow deletes that the run did not count. A stop after it leaves nothing to find, and the counts of forms, grants, and audit entries for that form may be missing from the error message. Entries on a resource that is already gone are not matched and stay.
    * A grant with no valid kind stops both calls: run `migrateGrants` first. An audit entry with no known root kind, or on a resource that is not a form, is left alone. Invites and links record only the id of their maker, with no kind, so they are not matched to a subject: they leave with their form.
    */
-  eraseAccount(subject: Subject, deps: FormsAccountDeps): Promise<Record<FormsCollection, number>>;
+  eraseAccount(subject: AccountSubject, deps: FormsAccountDeps): Promise<Record<FormsCollection, number>>;
 }
 
 // Through JSON, so the records are what a file would hold: a key with no value is dropped, not left as `undefined`.
 const plain = (value: unknown): JsonRecord[] => JSON.parse(JSON.stringify(value)) as JsonRecord[];
 
-function check(subject: Subject, deps: FormsAccountDeps): Store {
+function check(subject: AccountSubject, deps: FormsAccountDeps): Store {
   if ((["get", "query", "put", "delete", "transaction"] as const).some((name) => typeof deps?.store?.[name] !== "function")) throw new FormsAccountError("invalid_input", "formsAccount needs deps.store");
-  if (typeof subject?.id !== "string" || subject.id.trim() === "" || !(SUBJECT_KINDS as readonly unknown[]).includes(subject.kind)) {
-    throw new FormsAccountError("invalid_input", "subject needs an id and a kind of human or agent");
+  if (typeof subject?.id !== "string" || subject.id.trim() === "" || !(PRINCIPAL_KINDS as readonly unknown[]).includes(subject.kind)) {
+    throw new FormsAccountError("invalid_input", "subject needs an id and a valid principal kind");
   }
   return deps.store;
 }
@@ -54,7 +52,7 @@ function check(subject: Subject, deps: FormsAccountDeps): Store {
  * An owner with no valid kind, or a folder chain that cannot be read (a loop, a missing parent, or more than MAX_FOLDER_DEPTH steps),
  * stops the erase rather than guess.
  */
-async function noOtherOwner(store: Store, formId: string, subject: Subject): Promise<boolean> {
+async function noOtherOwner(store: Store, formId: string, subject: AccountSubject): Promise<boolean> {
   let id: string | undefined = formId;
   for (let depth = 0; id !== undefined; depth++) {
     if (depth >= MAX_FOLDER_DEPTH) throw new Error("the folder path is too deep to read");
@@ -91,7 +89,7 @@ const collect = async (store: Store, collection: string, where: Record<string, s
  * The subject's grants on forms. A grant on another kind of resource is another package's. A grant with no valid kind
  * could be the person's or the agent's, so it stops the call: run `migrateGrants` first.
  */
-async function formGrants(store: Store, subject: Subject) {
+async function formGrants(store: Store, subject: AccountSubject) {
   const out: { id: string; resourceId: string; role: unknown; data: JsonRecord }[] = [];
   for await (const { id, data } of docs(store, "grants", { subjectId: subject.id })) {
     if (!(SUBJECT_KINDS as readonly unknown[]).includes(data.subjectKind)) throw new FormsAccountError("invalid_input", `a grant has no valid kind: run migrateGrants first`);
@@ -104,10 +102,10 @@ async function formGrants(store: Store, subject: Subject) {
 }
 
 /**
- * Audit entries on forms whose root is the subject: a person, or an agent with its own identity, and what acts for them.
+ * Audit entries on forms whose root id and principal kind match the subject.
  * An entry with no known root kind, no resource, or a resource that is not a form is not matched: it is not provably the subject's here.
  */
-async function auditOf(store: Store, subject: Subject) {
+async function auditOf(store: Store, subject: AccountSubject) {
   const out: { id: string; data: JsonRecord }[] = [];
   const isForm = new Map<string, boolean>();
   for (const doc of await collect(store, "audit", { rootId: subject.id })) {

@@ -15,7 +15,7 @@ Build forms and collect answers into tables.
 npm install agentic-forms
 ```
 
-It needs Node 22 or newer. It depends on `agentic-identity` 0.9.0 or later below 1.0.0 and `agentic-design` 0.8.0 or later below 1.0.0.
+It needs Node 22 or newer. It depends on `agentic-identity` 0.10.0 or later below 1.0.0 and `agentic-design` 0.8.0 or later below 1.0.0.
 
 ## Quick start
 
@@ -178,10 +178,15 @@ A stdio server writes only MCP messages to stdout, so do not log there.
 
 ## Account export and erase
 
-A host that runs account export and erase calls `formsAccount` from `agentic-forms/account`, so it never reads the storage layout. The subject is `{ id, kind }`, with `kind` set to `human` or `agent`: a person and an agent with one id are two subjects.
+A host that runs account export and erase calls `formsAccount` from `agentic-forms/account`, so it never reads the storage layout. The subject is `{ id, kind }`. All identity principal kinds are accepted and kept separate. Grants use `human` or `agent`; other kinds can hold matching audit entries.
 
 ```ts
 import { formsAccount } from "agentic-forms/account";
+import { createAccountRegistry } from "agentic-identity/account";
+
+const registry = createAccountRegistry().register(formsAccount, { store });
+const archive = await registry.export({ id: "ana", kind: "human" });
+// Existing direct calls remain supported.
 
 const data = await formsAccount.exportAccount({ id: "ana", kind: "human" }, { store });
 const counts = await formsAccount.eraseAccount({ id: "ana", kind: "human" }, { store });
@@ -191,7 +196,7 @@ const counts = await formsAccount.eraseAccount({ id: "ana", kind: "human" }, { s
 - The erase removes each form that the subject alone owns, with its snapshots, answers, grants, and audit entries, including the entries of other people on that form. A form with another owner stays (also an owner of a folder above it), and only the subject's grant goes. The grants of the subject on other forms go too. Last, the audit entries rooted in the subject go. It returns counts by the same names.
 - A repeat of the erase counts zero. If it stops, the error names the form id and the counts so far. The counts of a run that stopped can be low. A stop before the form row goes is finished by a repeat. A stop after it leaves no data, but the counts of that form can be missing. Grants and audit entries on a form that is already gone are not matched and stay.
 - Answers hold no respondent id, so they are exported only with their form. A grant with no valid kind stops both calls: run `migrateGrants` first. Audit entries are matched only on forms, and only with a known root kind. Invites and links keep the id of their maker with no kind, so they leave only with their form.
-- The shape is provisional and does not yet fit the `AccountPackage` contract in `agentic-identity` 0.10. Stop writes before you run the erase.
+- The contributor implements `AccountPackage<FormsAccountDeps>` from `agentic-identity` 0.10 or later. The registry returns the same collections in its archive and the same erase counts in its report. Stop writes before you run the erase.
 
 ## UI
 

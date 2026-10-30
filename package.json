@@ -1,6 +1,6 @@
 {
   "name": "agentic-forms",
-  "version": "0.11.5",
+  "version": "0.12.0",
   "description": "Build forms and collect answers into tables.",
   "keywords": [
     "forms",
@@ -70,13 +70,14 @@
     "dev": "npm run build:ui && node scripts/dev-vars.mjs && WRANGLER_SEND_METRICS=false wrangler dev --port 8792",
     "dev:smoke": "npm run build:ui && node scripts/dev-vars.mjs && node scripts/dev-smoke.mjs 8792 /health",
     "prepublishOnly": "npm run build",
-    "ci:local": "npm run build && npm run typecheck && npm test && npm run test:ui",
-    "deploy:demo": "npm run build:ui && WRANGLER_SEND_METRICS=false wrangler deploy -c wrangler.demo.jsonc"
+    "ci:local": "npm run build && npm run typecheck && npm test && npm run test:ui && npm run test:account-package",
+    "deploy:demo": "npm run build:ui && WRANGLER_SEND_METRICS=false wrangler deploy -c wrangler.demo.jsonc",
+    "test:account-package": "node scripts/test-account-package.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.23.0",
     "agentic-design": ">=0.8.0 <1.0.0",
-    "agentic-identity": ">=0.9.0 <1.0.0",
+    "agentic-identity": ">=0.10.0 <1.0.0",
     "hono": "^4.13.14",
     "re2js": "^2.9.1",
     "zod": "^4.6.6"

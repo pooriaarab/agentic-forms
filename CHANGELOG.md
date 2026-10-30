@@ -2,6 +2,13 @@
 
 This file lists what changed in each release. The versions follow semver. The API can still change before 1.0.
 
+## 0.12.0 - 2026-10-30
+
+### Added
+
+- Publish a typed account registry contributor with support for every principal kind.
+- Keep direct account calls as a compatibility path. Require identity 0.10 or later.
+
 ## 0.11.5 - 2026-10-30
 
 ### Changed
